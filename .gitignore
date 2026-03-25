@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.db
+esme_cookies.db
+server/uploads/
+*.log
+.DS_Store

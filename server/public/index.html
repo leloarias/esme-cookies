@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Esme Cookies</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍪</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    :root {
+      --primary: #2C1810;
+      --secondary: #5D3A1A;
+      --accent: #C9883A;
+      --accent-light: #E8B86D;
+      --cream: #FEF9F3;
+      --warm: #F5EDE4;
+      --success: #2D7A4D;
+      --danger: #C44D4D;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--cream);
+      color: var(--primary);
+      min-height: 100vh;
+    }
+
+    /* Header compacto con fondo */
+    .header {
+      background: linear-gradient(135deg, rgba(44, 24, 16, 0.85) 0%, rgba(93, 58, 26, 0.8) 100%),
+                  url('https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1600') center/cover no-repeat;
+      padding: 30px 20px;
+      text-align: center;
+      color: white;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 8px;
+    }
+
+    .logo {
+      font-size: 3.5rem;
+      animation: cookieBounce 3s ease-in-out infinite;
+    }
+
+    @keyframes cookieBounce {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-6px) rotate(-4deg); }
+      50% { transform: translateY(-3px) rotate(4deg); }
+      75% { transform: translateY(-6px) rotate(-2deg); }
+    }
+
+    .shop-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+    }
+
+    .tagline {
+      font-size: 0.95rem;
+      opacity: 0.9;
+      margin-bottom: 12px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 16px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-badge.open {
+      background: rgba(45, 122, 77, 0.3);
+      color: #4ade80;
+      border: 2px solid rgba(45, 122, 77, 0.5);
+    }
+
+    .status-badge.closed {
+      background: rgba(196, 77, 77, 0.3);
+      color: #f87171;
+      border: 2px solid rgba(196, 77, 77, 0.5);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px 20px 100px;
+    }
+
+    /* Ofertas compactas */
+    .offers-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 25px;
+    }
+
+    .offer-card {
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      color: white;
+      padding: 14px 20px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 4px 15px rgba(201, 136, 58, 0.3);
+      animation: offerSlide 0.5s ease-out;
+    }
+
+    @keyframes offerSlide {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .offer-card .emoji {
+      font-size: 1.8rem;
+    }
+
+    .offer-card .content h4 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      margin-bottom: 2px;
+    }
+
+    .offer-card .content p {
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+
+    /* Productos */
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.5rem;
+      color: var(--primary);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .section-title::after {
+      content: '';
+      display: block;
+      width: 50px;
+      height: 3px;
+      background: linear-gradient(to right, var(--accent), var(--accent-light));
+      margin: 8px auto 0;
+      border-radius: 2px;
+    }
+
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .product-card {
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(44, 24, 16, 0.08);
+      transition: all 0.3s ease;
+    }
+
+    .product-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 30px rgba(44, 24, 16, 0.15);
+    }
+
+    .product-card.added {
+      animation: cardPop 0.4s ease;
+    }
+
+    @keyframes cardPop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.03); box-shadow: 0 0 25px rgba(45, 122, 77, 0.4); }
+      100% { transform: scale(1); }
+    }
+
+    .product-img {
+      height: 180px;
+      background: linear-gradient(135deg, #F5EDE4 0%, #FAF6F0 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .product-img-tag {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+
+    .product-img-emoji {
+      font-size: 5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .product-card:hover .product-img-tag {
+      transform: scale(1.05);
+    }
+
+    .product-info {
+      padding: 18px 16px;
+      text-align: center;
+      background: white;
+    }
+
+    .product-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.15rem;
+      color: #1a0f08;
+      margin-bottom: 6px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .product-desc {
+      color: #6B5B4F;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .product-price {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 12px;
+      text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+    }
+
+    .product-price small {
+      font-size: 0.8rem;
+      color: #999;
+      font-weight: 400;
+    }
+
+    .qty-control {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--warm);
+      padding: 8px 14px;
+      border-radius: 50px;
+    }
+
+    .qty-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      color: white;
+      font-size: 1.4rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qty-btn:hover { transform: scale(1.1); }
+    .qty-btn:active { transform: scale(0.95); }
+
+    .qty-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--primary);
+      min-width: 30px;
+      text-align: center;
+    }
+
+    /* Form */
+    .form-section {
+      background: white;
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 6px 30px rgba(44, 24, 16, 0.08);
+      margin-top: 30px;
+    }
+
+    .form-section h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      color: var(--primary);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--secondary);
+      font-size: 0.9rem;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid var(--warm);
+      border-radius: 12px;
+      font-size: 0.95rem;
+      transition: all 0.3s ease;
+      font-family: inherit;
+      background: var(--cream);
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: white;
+    }
+
+    /* Delivery Options */
+    .delivery-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .delivery-opt {
+      display: flex;
+      align-items: center;
+      padding: 14px;
+      border: 2px solid var(--warm);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: var(--cream);
+    }
+
+    .delivery-opt:hover { border-color: var(--accent-light); }
+
+    .delivery-opt.selected {
+      border-color: var(--accent);
+      background: rgba(201, 136, 58, 0.08);
+    }
+
+    .delivery-opt input { display: none; }
+
+    .delivery-icon { font-size: 1.8rem; margin-right: 10px; }
+
+    .delivery-text { flex: 1; }
+    .delivery-text strong { display: block; font-size: 0.9rem; color: var(--primary); }
+    .delivery-text span { font-size: 0.8rem; color: #6B5B4F; }
+
+    .delivery-check {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--warm);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.3s ease;
+    }
+
+    .delivery-opt.selected .delivery-check {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    /* Summary */
+    .summary {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 16px;
+      padding: 20px;
+      color: white;
+      margin-top: 20px;
+    }
+
+    .summary h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .summary-items { margin-bottom: 12px; }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.9rem;
+    }
+
+    .summary-total {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 12px;
+      margin-top: 8px;
+      border-top: 2px solid rgba(255,255,255,0.2);
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .summary-total span:last-child { color: var(--accent-light); }
+
+    .submit-btn {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 20px rgba(201, 136, 58, 0.3);
+      text-transform: uppercase;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(201, 136, 58, 0.4);
+    }
+
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Cart Float */
+    .cart-float {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      border: none;
+      padding: 14px 24px;
+      border-radius: 60px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 25px rgba(44, 24, 16, 0.3);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 99;
+    }
+
+    .cart-float:hover { transform: translateY(-4px); }
+
+    .cart-count {
+      background: var(--accent);
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: linear-gradient(135deg, var(--success), #1E5C3A);
+      color: white;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      opacity: 0;
+      transition: all 0.4s ease;
+      z-index: 1000;
+      box-shadow: 0 6px 25px rgba(0,0,0,0.2);
+    }
+
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.error { background: linear-gradient(135deg, var(--danger), #a33a3a); }
+
+    /* Success */
+    .success-screen { display: none; text-align: center; padding: 60px 20px; }
+    .success-screen.show { display: block; }
+    .success-icon { font-size: 5rem; margin-bottom: 20px; }
+    .success-screen h2 { font-family: 'Playfair Display', serif; font-size: 1.8rem; color: var(--success); margin-bottom: 12px; }
+    .success-screen p { color: #6B5B4F; font-size: 1rem; margin-bottom: 6px; }
+
+    .new-order-btn {
+      margin-top: 25px;
+      padding: 14px 30px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .new-order-btn:hover { transform: translateY(-2px); }
+
+    /* Shop Closed Overlay */
+    #shop-closed-overlay {
+      display: none !important;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(135deg, rgba(44, 24, 16, 0.95), rgba(93, 58, 26, 0.95));
+      backdrop-filter: blur(10px);
+      z-index: 10000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #shop-closed-overlay.show { display: flex !important; }
+
+    .closed-box {
+      background: rgba(255,255,255,0.05);
+      padding: 40px;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      max-width: 400px;
+    }
+
+    .closed-icon { font-size: 5rem; margin-bottom: 15px; }
+    .closed-box h1 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 12px; }
+    .closed-box p { font-size: 1rem; opacity: 0.9; margin-bottom: 20px; }
+
+    .closed-badge {
+      background: linear-gradient(135deg, var(--danger), #a33a3a);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .closed-whatsapp {
+      display: block;
+      margin-top: 20px;
+      color: var(--accent-light);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .loading { text-align: center; padding: 40px; color: #6B5B4F; }
+
+    @media (max-width: 768px) {
+      .header { padding: 20px 15px; }
+      .logo { font-size: 2.5rem; }
+      .shop-name { font-size: 1.5rem; }
+      .products-grid { grid-template-columns: 1fr; }
+      .delivery-options { grid-template-columns: 1fr; }
+      .form-section { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-top">
+      <span class="logo">🍪</span>
+      <h1 class="shop-name" id="shop-name">Esme Cookies</h1>
+    </div>
+    <p class="tagline">Deliciosas galletas artesanales hechas con amor</p>
+    <div id="shop-status" class="status-badge open">
+      <span class="status-dot"></span>
+      <span id="status-text">Abierto</span>
+    </div>
+  </header>
+
+  <!-- Shop Closed Overlay -->
+  <div id="shop-closed-overlay">
+    <div class="closed-box">
+      <div class="closed-icon">🍪</div>
+      <h1 id="closed-name">Esme Cookies</h1>
+      <p>Estamos horneando nuevas deliciosas ideas.<br>Estaremos de vuelta muy pronto.</p>
+      <div class="closed-badge">TIENDA CERRADA</div>
+      <a id="closed-whatsapp" href="#" target="_blank" class="closed-whatsapp">
+        📱 Contactar por WhatsApp
+      </a>
+    </div>
+  </div>
+
+  <div class="container">
+    
+    <!-- Ofertas compactas -->
+    <div class="offers-container" id="offers-container"></div>
+
+    <h2 class="section-title">Nuestros Productos</h2>
+
+    <div class="products-grid" id="products-grid">
+      <div class="loading">Cargando productos...</div>
+    </div>
+
+    <div id="order-form">
+      <div class="form-section">
+        <h2>Arma tu pedido</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Tu nombre *</label>
+            <input type="text" id="cliente" placeholder="Ej: María García">
+          </div>
+          <div class="form-group">
+            <label>WhatsApp *</label>
+            <input type="tel" id="telefono" placeholder="Ej: 8291234567">
+          </div>
+        </div>
+
+        <div class="delivery-options">
+          <label class="delivery-opt selected" onclick="selectDelivery(this, 'pickup')">
+            <input type="radio" name="tipo-entrega" value="pickup" checked>
+            <span class="delivery-icon">🏪</span>
+            <span class="delivery-text">
+              <strong>Pasar a buscar</strong>
+              <span>GRATIS</span>
+            </span>
+            <span class="delivery-check">✓</span>
+          </label>
+          <label class="delivery-opt" onclick="selectDelivery(this, 'delivery')">
+            <input type="radio" name="tipo-entrega" value="delivery">
+            <span class="delivery-icon">🚗</span>
+            <span class="delivery-text">
+              <strong>Delivery</strong>
+              <span id="delivery-price-label">RD$50</span>
+            </span>
+            <span class="delivery-check"></span>
+          </label>
+          <label class="delivery-opt" onclick="selectDelivery(this, 'envio')">
+            <input type="radio" name="tipo-entrega" value="envio">
+            <span class="delivery-icon">📦</span>
+            <span class="delivery-text">
+              <strong>Envío</strong>
+              <span id="envio-price-label">RD$100</span>
+            </span>
+            <span class="delivery-check"></span>
+          </label>
+        </div>
+
+        <div class="form-grid" id="address-fields" style="display: none;">
+          <div class="form-group">
+            <label>Dirección *</label>
+            <input type="text" id="direccion" placeholder="Calle, número...">
+          </div>
+          <div class="form-group">
+            <label>Sector</label>
+            <input type="text" id="sector" placeholder="Ej: Ensanche Espaillat">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Método de pago</label>
+            <select id="pago">
+              <option>Transferencia</option>
+              <option>Efectivo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notas</label>
+            <input type="text" id="observaciones" placeholder="Ej: Sin nueces">
+          </div>
+        </div>
+
+        <div class="summary">
+          <h3>Tu Pedido</h3>
+          <div class="summary-items" id="summary-items">
+            <p style="text-align:center;opacity:0.7;">Agrega productos</p>
+          </div>
+          <div class="summary-total">
+            <span>TOTAL</span>
+            <span>RD$ <span id="total-display">0</span></span>
+          </div>
+          <button class="submit-btn" id="submit-btn" onclick="submitOrder()" disabled>
+            Realizar Pedido
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="success-screen" id="success-screen">
+      <div class="success-icon">🎉</div>
+      <h2>¡Pedido Enviado!</h2>
+      <p>Tu pedido <strong>#<span id="order-number">0000</span></strong> fue recibido</p>
+      <p>Te contactaremos pronto por WhatsApp</p>
+      <div id="cupos-disponibles" style="margin:15px 0;padding:12px;background:var(--warm);border-radius:10px;font-size:0.85rem;"></div>
+      <div id="bank-accounts-display" style="margin:15px auto;max-width:400px;padding:15px;background:#E8F5E9;border-radius:12px;border:2px solid var(--success);text-align:left;"></div>
+      <button class="new-order-btn" onclick="newOrder()">+ Hacer otro pedido</button>
+    </div>
+  </div>
+
+  <button class="cart-float" id="cart-float" onclick="document.querySelector('.form-section').scrollIntoView({behavior:'smooth'})">
+    🛒 <span class="cart-count" id="cart-count">0</span>
+  </button>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const API = location.protocol + '//' + location.host;
+    let products = [];
+    let cart = {};
+    let deliveryType = 'pickup';
+    let config = { delivery: 50, envio: 100, isOpen: 1, shopPhone: '8097851241', shopName: 'Esme Cookies' };
+    let activePromos = [];
+
+    // WebSocket
+    const socket = io();
+    
+    socket.on('tienda_cerrada', function() {
+      config.isOpen = 0;
+      updateShopStatus();
+    });
+    
+    socket.on('tienda_abierta', function() {
+      config.isOpen = 1;
+      updateShopStatus();
+    });
+    
+    socket.on('config_update', function(data) {
+      if (data.isOpen !== undefined) {
+        config.isOpen = data.isOpen;
+        updateShopStatus();
+      }
+      if (data.deliveryPrice !== undefined) {
+        config.delivery = data.deliveryPrice;
+        document.getElementById('delivery-price-label').textContent = 'RD$' + data.deliveryPrice;
+      }
+      if (data.envioPrice !== undefined) {
+        config.envio = data.envioPrice;
+        document.getElementById('envio-price-label').textContent = 'RD$' + data.envioPrice;
+      }
+      if (data.shopPhone !== undefined) config.shopPhone = data.shopPhone;
+      if (data.shopName !== undefined) {
+        config.shopName = data.shopName;
+        document.getElementById('shop-name').textContent = data.shopName;
+        document.getElementById('closed-name').textContent = data.shopName;
+      }
+    });
+
+    socket.on('ofertas_update', function() {
+      loadOffers();
+    });
+
+    socket.on('promo_expirada', function(data) {
+      showToast(`✨ La oferta "${data.titulo}" ha terminado.`, 'error');
+      loadOffers();
+    });
+
+    function updateShopStatus() {
+      const statusEl = document.getElementById('shop-status');
+      const statusText = document.getElementById('status-text');
+      const overlay = document.getElementById('shop-closed-overlay');
+      const whatsapp = document.getElementById('closed-whatsapp');
+
+      if (config.isOpen == 0) {
+        statusEl.className = 'status-badge closed';
+        statusText.textContent = 'Cerrado';
+        overlay.classList.add('show');
+        whatsapp.href = 'https://wa.me/' + config.shopPhone.replace(/\D/g, '');
+      } else {
+        statusEl.className = 'status-badge open';
+        statusText.textContent = 'Abierto';
+        overlay.classList.remove('show');
+      }
+    }
+
+    // Plantillas de mensajes
+    var msgTemplates = {
+      msgEsperandoPago: '',
+      msgPagoConfirmado: '',
+      msgPreparando: '',
+      msgListo: '',
+      msgEntregado: ''
+    };
+    
+    // Función para formatear mensaje con plantillas
+    function formatMessage(template, data) {
+      if (!template) return '';
+      let msg = template;
+      msg = msg.replace(/{{cliente}}/g, data.cliente || '');
+      msg = msg.replace(/{{numero}}/g, data.numero || '');
+      msg = msg.replace(/{{total}}/g, data.total || '');
+      msg = msg.replace(/{{productos}}/g, data.productos || '');
+      msg = msg.replace(/{{tipo_entrega}}/g, data.tipoEntrega || '');
+      msg = msg.replace(/{{cuentas_bancarias}}/g, data.cuentas_bancarias || '');
+      return msg;
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch(API + '/api/public-config');
+        if (res.ok) {
+          const cfg = await res.json();
+          config = {
+            delivery: cfg.deliveryPrice !== undefined ? cfg.deliveryPrice : 50,
+            envio: cfg.envioPrice !== undefined ? cfg.envioPrice : 100,
+            isOpen: cfg.isOpen !== undefined ? cfg.isOpen : 1,
+            shopPhone: cfg.shopPhone || '8097851241',
+            shopName: cfg.shopName || 'Esme Cookies',
+            bankAccounts: Array.isArray(cfg.bankAccounts) ? cfg.bankAccounts : []
+          };
+          
+          // Cargar plantillas de mensajes
+          msgTemplates.msgEsperandoPago = cfg.msgEsperandoPago || '';
+          msgTemplates.msgPagoConfirmado = cfg.msgPagoConfirmado || '';
+          msgTemplates.msgPreparando = cfg.msgPreparando || '';
+          msgTemplates.msgListo = cfg.msgListo || '';
+          msgTemplates.msgEntregado = cfg.msgEntregado || '';
+          
+          document.getElementById('shop-name').textContent = config.shopName;
+          document.getElementById('closed-name').textContent = config.shopName;
+          document.getElementById('delivery-price-label').textContent = 'RD$' + config.delivery;
+          document.getElementById('envio-price-label').textContent = 'RD$' + config.envio;
+          updateShopStatus();
+        }
+      } catch (err) {
+        console.error('Error loading config:', err);
+      }
+    }
+
+    async function loadProducts() {
+      try {
+        const res = await fetch(API + '/api/products');
+        products = await res.json();
+        renderProducts();
+      } catch (err) {
+        document.getElementById('products-grid').innerHTML = '<p class="loading">Error al cargar productos</p>';
+      }
+    }
+
+    async function loadOffers() {
+      try {
+        const res = await fetch(API + '/api/promociones');
+        const promos = await res.json();
+        activePromos = promos;
+        renderOffers(promos);
+        updateCart();
+      } catch (err) {
+        console.error('Error loading offers:', err);
+      }
+    }
+
+    function getActivePromoDiscounts(subtotal, cartItems) {
+      let discount = 0;
+      let discountDesc = '';
+      let freeDelivery = false;
+      let freeEnvio = false;
+      let freeAllEnvio = false;
+      
+      activePromos.forEach(promo => {
+        // Validaciones mínimas compartidas
+        const totalItems = Object.values(cartItems).reduce((a, b) => a + b, 0);
+        
+        // Verificar si la promoción está agotada (límite de usos)
+        if (promo.limite_usos && promo.limite_usos > 0) {
+          const disp = promo.limite_usos - (promo.usos_actuales || 0);
+          if (disp <= 0) return; // No aplicar si está agotada
+        }
+        
+        if (promo.compra_minima > 0 && subtotal < promo.compra_minima) return;
+        if (promo.cantidad_minima > 0 && totalItems < promo.cantidad_minima) return;
+
+        switch(promo.tipo) {
+          case 'descuento_pct':
+            if (subtotal > 0) {
+              const d = Math.round(subtotal * (promo.descuento_pct / 100));
+              discount += d;
+              discountDesc += (discountDesc ? ', ' : '') + `-${promo.descuento_pct}%`;
+            }
+            break;
+          case 'descuento_fijo':
+            if (subtotal > 0) {
+              discount += promo.descuento_fijo;
+              discountDesc += (discountDesc ? ', ' : '') + `-RD$${promo.descuento_fijo}`;
+            }
+            break;
+          case 'free_delivery':
+            if (deliveryType === 'delivery') freeDelivery = true;
+            break;
+          case 'free_envio':
+            if (deliveryType === 'envio') freeEnvio = true;
+            break;
+          case 'free_all':
+            if (deliveryType !== 'pickup') freeAllEnvio = true;
+            break;
+          case 'bogo':
+            if (totalItems >= 3) {
+              // Por cada 3 productos, 1 es gratis (el más barato)
+              const gruposGratuitos = Math.floor(totalItems / 3);
+              let precios = [];
+              Object.keys(cartItems).forEach(id => {
+                const p = products.find(x => x.id == id);
+                if (p) {
+                  for (let i = 0; i < cartItems[id]; i++) {
+                    precios.push(p.precio);
+                  }
+                }
+              });
+              precios.sort((a, b) => a - b);
+              const gratisCount = Math.min(gruposGratuitos, precios.length);
+              const descuentoBogo = precios.slice(0, gratisCount).reduce((a, b) => a + b, 0);
+              discount += descuentoBogo;
+              discountDesc += (discountDesc ? ', ' : '') + `2x1 (${gratisCount} gratis${gratisCount > 1 ? 's' : ''})`;
+            }
+            break;
+        }
+      });
+      
+      return { discount, discountDesc, freeDelivery, freeEnvio, freeAllEnvio };
+    }
+
+    function renderOffers(promos) {
+      const container = document.getElementById('offers-container');
+      if (!promos || promos.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      const tipoLabels = {
+        banner: '🏷️ Banner',
+        free_delivery: '🚚 Delivery Gratis',
+        free_envio: '📦 Envío Nacional Gratis',
+        free_all: '🎁 Todos los Envíos Gratis',
+        descuento_pct: '% Descuento',
+        descuento_fijo: '💵 Descuento Fijo',
+        bogo: '🛒 Lleva 3 Paga 2',
+        cliente_nuevo: '⭐ Primera Compra',
+        pedido_minimo: '🛍️ Pedido Mínimo',
+        cantidad_minima: '🎯 Cantidad Mínima',
+        whatsapp_only: '📱 Solo por WhatsApp'
+      };
+
+      const getTipoDesc = (promo) => {
+        switch(promo.tipo) {
+          case 'descuento_pct': return `¡${promo.descuento_pct}% de descuento!`;
+          case 'descuento_fijo': return `¡RD$${promo.descuento_fijo} de descuento!`;
+          case 'free_delivery': return '¡Delivery GRATIS!';
+          case 'free_envio': return '¡Envío Nacional GRATIS!';
+          case 'free_all': return '¡TODOS los envíos GRATIS!';
+          case 'bogo': return '¡Lleva 3 y 1 es GRATIS!';
+          case 'cliente_nuevo': return '¡Solo para nuevos clientes!';
+          case 'pedido_minimo': return `Solo pedidos desde RD$${promo.compra_minima}`;
+          case 'cantidad_minima': return `Lleva ${promo.cantidad_minima}+ unidades`;
+          case 'whatsapp_only': return '¡Solo por WhatsApp!';
+          default: return promo.descripcion || '';
+        }
+      };
+      
+      container.innerHTML = promos.map(promo => {
+        let restantes = '';
+        let agotado = false;
+        if (promo.limite_usos && promo.limite_usos > 0) {
+          const disp = promo.limite_usos - (promo.usos_actuales || 0);
+          if (disp > 0) {
+            const urgente = disp <= 5;
+            restantes = `
+              <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+                ${urgente 
+                  ? `<span style="background:#ff4444;padding:3px 10px;border-radius:20px;font-size:0.7rem;font-weight:700;color:white;animation:pulse 1s infinite;">⚠️ ¡Solo ${disp} disponibles!</span>`
+                  : `<span style="background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;color:white;">🔥 ${disp} cupones disponibles</span>`
+                }
+              </div>
+              <style>@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }</style>
+            `;
+          } else {
+            agotado = true;
+            restantes = `
+              <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+                <span style="background:rgba(100,100,100,0.5);padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;color:white;">⛔ AGOTADO</span>
+              </div>
+            `;
+          }
+        }
+        
+        let fechaInfo = '';
+        if (promo.fecha_inicio || promo.fecha_fin) {
+          const ini = promo.fecha_inicio ? promo.fecha_inicio : '';
+          const fin = promo.fecha_fin ? promo.fecha_fin : '';
+          fechaInfo = `<span style="display:inline-block;background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:20px;font-size:0.7rem;font-weight:600;color:white;">📅 Del ${ini} al ${fin}</span>`;
+        }
+        let horaInfo = '';
+        if (promo.hora_inicio || promo.hora_fin) {
+          const hIni = promo.hora_inicio ? promo.hora_inicio : '';
+          const hFin = promo.hora_fin ? promo.hora_fin : '';
+          horaInfo = `<span style="display:inline-block;background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:20px;font-size:0.7rem;font-weight:600;color:white;margin-left:6px;">🕐 ${hIni} - ${hFin}</span>`;
+        }
+        
+        return `
+        <div class="offer-card" style="background: linear-gradient(135deg, ${agotado ? '#888888' : (promo.color || '#C9883A')}, ${agotado ? '#666666' : (promo.color || '#C9883A')}cc); ${agotado ? 'opacity:0.7;' : ''}">
+          <div style="display:flex;align-items:flex-start;gap:12px;width:100%;">
+            <div style="font-size:2rem;">${promo.emoji || '🎉'}</div>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                <span style="font-weight:700;font-size:1rem;color:white;">${promo.titulo}</span>
+                <span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:20px;font-size:0.65rem;font-weight:600;color:white;">${tipoLabels[promo.tipo] || promo.tipo}</span>
+                ${restantes}
+              </div>
+              <p style="font-size:0.85rem;opacity:0.95;color:white;margin:0 0 4px;">${getTipoDesc(promo)}</p>
+              ${promo.descripcion ? `<p style="font-size:0.75rem;opacity:0.8;color:white;margin:0;">${promo.descripcion}</p>` : ''}
+              ${(fechaInfo || horaInfo) ? `<p style="margin:6px 0 0;">${fechaInfo}${horaInfo}</p>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderProducts() {
+      const grid = document.getElementById('products-grid');
+      if (!products.length) {
+        grid.innerHTML = '<p class="loading">No hay productos disponibles</p>';
+        return;
+      }
+      grid.innerHTML = products.map(p => {
+        const qty = cart[p.id] || 0;
+        const imgSrc = p.imagen && p.imagen.startsWith('http') ? p.imagen : (p.imagen ? API + p.imagen : '');
+        const hasImage = imgSrc && imgSrc.length > 0;
+        
+        let imageContent;
+        if (hasImage) {
+          imageContent = `<img src="${imgSrc}" alt="${p.nombre}" class="product-img-tag" onerror="this.parentElement.innerHTML='<div class=\\'product-img-emoji\\'>🍪</div>'">`;
+        } else {
+          imageContent = `<div class="product-img-emoji">🍪</div>`;
+        }
+        
+        return `
+          <div class="product-card" id="prod-${p.id}">
+            <div class="product-img">${imageContent}</div>
+            <div class="product-info">
+              <h3 class="product-name">${p.nombre}</h3>
+              ${p.descripcion ? `<p class="product-desc">${p.descripcion}</p>` : ''}
+              <div class="product-price">RD$ ${p.precio} <small>/ unidad</small></div>
+              <div class="qty-control">
+                <button class="qty-btn" onclick="changeQty(${p.id}, -1)">−</button>
+                <span class="qty-value" id="qty-${p.id}">${qty}</span>
+                <button class="qty-btn" onclick="changeQty(${p.id}, 1)">+</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function changeQty(id, delta) {
+      const current = cart[id] || 0;
+      const newQty = Math.max(0, current + delta);
+      if (newQty === 0) delete cart[id];
+      else cart[id] = newQty;
+      document.getElementById('qty-' + id).textContent = newQty;
+      if (delta > 0) {
+        const card = document.getElementById('prod-' + id);
+        card.classList.add('added');
+        setTimeout(() => card.classList.remove('added'), 500);
+        showToast('¡Agregado!');
+      }
+      updateCart();
+    }
+
+    function updateCart() {
+      const count = Object.values(cart).reduce((a, b) => a + b, 0);
+      document.getElementById('cart-count').textContent = count;
+      const itemsDiv = document.getElementById('summary-items');
+      let subtotal = 0;
+      let html = '';
+      
+      for (const [id, qty] of Object.entries(cart)) {
+        const p = products.find(x => x.id == id);
+        if (p && qty > 0) {
+          const itemTotal = p.precio * qty;
+          subtotal += itemTotal;
+          html += `<div class="summary-item"><span>${p.nombre} x${qty}</span><span>RD$ ${itemTotal.toLocaleString()}</span></div>`;
+        }
+      }
+      
+      const { discount, discountDesc, freeDelivery, freeEnvio, freeAllEnvio } = getActivePromoDiscounts(subtotal, cart);
+      
+      html = html || '<p style="text-align:center;opacity:0.7;">Agrega productos</p>';
+      
+      if (freeAllEnvio) {
+        html += '<div class="summary-item" style="color:var(--success);"><span>🎁 Envío GRATIS</span><span>-RD$0</span></div>';
+      } else if (freeDelivery && deliveryType === 'delivery') {
+        html += '<div class="summary-item" style="color:var(--success);"><span>🚚 Delivery GRATIS</span><span>-RD$0</span></div>';
+      } else if (freeEnvio && deliveryType === 'envio') {
+        html += '<div class="summary-item" style="color:var(--success);"><span>📦 Envío Nacional GRATIS</span><span>-RD$0</span></div>';
+      }
+      
+      if (discount > 0) {
+        html += '<div class="summary-item" style="color:var(--success);"><span>🏷️ Descuento</span><span>-RD$ ' + discount.toLocaleString() + '</span></div>';
+      }
+      
+      itemsDiv.innerHTML = html;
+      
+      let envio = deliveryType === 'pickup' ? 0 : (deliveryType === 'delivery' ? config.delivery : config.envio);
+      if (freeAllEnvio || (freeDelivery && deliveryType === 'delivery') || (freeEnvio && deliveryType === 'envio')) {
+        envio = 0;
+      }
+      
+      const total = Math.max(0, subtotal - discount + envio);
+      document.getElementById('total-display').textContent = total.toLocaleString();
+      document.getElementById('submit-btn').disabled = count === 0;
+      
+      if (discount > 0 || freeAllEnvio || freeDelivery || freeEnvio) {
+        showToast('🎉 ¡Descuento aplicado!', 'success');
+      }
+    }
+
+    function selectDelivery(el, type) {
+      document.querySelectorAll('.delivery-opt').forEach(opt => {
+        opt.classList.remove('selected');
+        opt.querySelector('.delivery-check').textContent = '';
+      });
+      el.classList.add('selected');
+      el.querySelector('.delivery-check').textContent = '✓';
+      deliveryType = type;
+      document.getElementById('address-fields').style.display = type === 'pickup' ? 'none' : 'grid';
+      updateCart();
+    }
+
+    async function submitOrder() {
+      if (config.isOpen == 0) {
+        showToast('La tienda está cerrada', 'error');
+        return;
+      }
+      const cliente = document.getElementById('cliente').value.trim();
+      const telefono = document.getElementById('telefono').value.trim();
+      const direccion = document.getElementById('direccion').value.trim();
+      const sector = document.getElementById('sector').value.trim();
+      const pago = document.getElementById('pago').value;
+      const observaciones = document.getElementById('observaciones').value.trim();
+
+      if (!cliente) { showToast('Ingresa tu nombre', 'error'); return; }
+      if (!telefono || telefono.replace(/\D/g, '').length < 10) {
+        showToast('Ingresa un WhatsApp válido', 'error'); return;
+      }
+      if (deliveryType !== 'pickup' && !direccion) {
+        showToast('Ingresa la dirección', 'error'); return;
+      }
+
+      const productList = [];
+      let subtotal = 0;
+      for (const [id, qty] of Object.entries(cart)) {
+        const p = products.find(x => x.id == id);
+        if (p && qty > 0) {
+          productList.push(`${p.nombre} x${qty}`);
+          subtotal += p.precio * qty;
+        }
+      }
+      if (!productList.length) { showToast('Selecciona productos', 'error'); return; }
+
+      const { discount, freeDelivery, freeEnvio, freeAllEnvio } = getActivePromoDiscounts(subtotal, cart);
+      const envio = deliveryType === 'pickup' ? 0 : (deliveryType === 'delivery' ? config.delivery : config.envio);
+      const subtotalTotal = subtotal;
+      const totalConDescuento = Math.max(0, subtotal - discount + ( (freeAllEnvio || (freeDelivery && deliveryType === 'delivery') || (freeEnvio && deliveryType === 'envio')) ? 0 : envio ));
+
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+
+      try {
+        const cartItems = [];
+        for (const [id, qty] of Object.entries(cart)) {
+          const p = products.find(x => x.id == id);
+           if (p && qty > 0) {
+            cartItems.push({ id: p.id, nombre: p.nombre, precio: p.precio, qty: qty });
+          }
+        }
+
+        const res = await fetch(API + '/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cliente, telefono, productos: productList.join(', '),
+            cantidad: Object.values(cart).reduce((a, b) => a + b, 0),
+            subtotal: subtotalTotal, 
+            envio: ( (freeAllEnvio || (freeDelivery && deliveryType === 'delivery') || (freeEnvio && deliveryType === 'envio')) ? 0 : envio ), 
+            total: totalConDescuento, 
+            pago, tipo_entrega: deliveryType,
+            direccion: deliveryType === 'pickup' ? '' : direccion, sector,
+            observaciones: [observaciones, direccion ? 'Dir: ' + direccion : '', sector ? 'Sector: ' + sector : ''].filter(Boolean).join(' | '),
+            cartItems: cartItems
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('order-number').textContent = String(data.numero).padStart(4, '0');
+          document.getElementById('order-form').style.display = 'none';
+          document.getElementById('success-screen').classList.add('show');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          
+          // Mostrar cupos disponibles después del pedido
+          let cuposMsg = '';
+          activePromos.forEach(promo => {
+            if (promo.limite_usos && promo.limite_usos > 0) {
+              const disp = promo.limite_usos - (promo.usos_actuales || 0) - 1;
+              if (disp > 0 && disp <= 5) {
+                cuposMsg += `⚠️ ¡La promoción "${promo.titulo}" solo tiene ${disp} cupos disponibles!\n`;
+              }
+            }
+          });
+          document.getElementById('cupos-disponibles').textContent = cuposMsg;
+          document.getElementById('cupos-disponibles').style.background = cuposMsg ? '#fff3cd' : 'var(--warm)';
+          
+          // Mostrar cuentas bancarias
+          let bankHtml = '';
+          if (config.bankAccounts && config.bankAccounts.length > 0) {
+            bankHtml = '<div style="font-weight:700;color:var(--success);margin-bottom:10px;">💳 CUENTAS PARA TRANSFERENCIA:</div>';
+            config.bankAccounts.forEach((c, i) => {
+              bankHtml += `<div style="margin-bottom:10px;padding:8px;background:white;border-radius:8px;">
+                <div style="font-weight:600;color:#2E7D32;">📌 Cuenta ${i+1}: ${c.banco}</div>
+                <div style="font-size:0.85rem;color:#555;">Tipo: ${c.tipo}</div>
+                <div style="font-size:0.85rem;color:#555;">No. Cuenta: ${c.numero}</div>
+                <div style="font-size:0.85rem;color:#555;">Titular: ${c.titular}</div>
+              </div>`;
+            });
+          }
+          document.getElementById('bank-accounts-display').innerHTML = bankHtml;
+          
+          if (typeof confetti === 'function') {
+            confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 }, colors: ['#C9883A', '#2D7A4D', '#2C1810'] });
+          }
+          setTimeout(() => {
+            // Mensaje del cliente a la tienda (notifica el pedido)
+            let productosList = '';
+            Object.keys(cart).forEach(id => {
+              const prod = products.find(p => p.id == id);
+              if (prod) productosList += `• ${prod.nombre} x${cart[id]}\n`;
+            });
+
+            let whatsappMsg = `*¡Nuevo Pedido #${String(data.numero).padStart(4, '0')}!*\n\n`;
+            whatsappMsg += `👤 *Cliente:* ${cliente}\n`;
+            whatsappMsg += `📱 *Teléfono:* ${data.telefono}\n`;
+            if (data.direccion) whatsappMsg += `📍 *Dirección:* ${data.direccion}\n`;
+            whatsappMsg += `🚚 *Entrega:* ${deliveryType === 'pickup' ? 'Pasar a buscar' : deliveryType === 'delivery' ? 'Delivery' : 'Envío'}\n\n`;
+            whatsappMsg += `🍪 *Productos:*\n${productosList}\n`;
+            if (data.promos && data.promos.length > 0) {
+              whatsappMsg += `🎉 *Promociones aplicadas:*\n`;
+              data.promos.forEach(p => {
+                whatsappMsg += `• ${p.titulo}: -RD$${p.ahorro.toLocaleString()}\n`;
+              });
+              whatsappMsg += '\n';
+            }
+            whatsappMsg += `💰 *TOTAL:* RD$ ${(data.total || totalConDescuento).toLocaleString()}`;
+
+            window.open('https://wa.me/' + config.shopPhone.replace(/\D/g, '') + '?text=' + encodeURIComponent(whatsappMsg), '_blank');
+          }, 2000);
+          
+          loadOffers();
+        } else {
+          showToast(data.error || 'Error al enviar', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión', 'error');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Realizar Pedido';
+    }
+
+    function newOrder() {
+      cart = {};
+      document.getElementById('cliente').value = '';
+      document.getElementById('telefono').value = '';
+      document.getElementById('direccion').value = '';
+      document.getElementById('sector').value = '';
+      document.getElementById('observaciones').value = '';
+      document.getElementById('order-form').style.display = 'block';
+      document.getElementById('success-screen').classList.remove('show');
+      renderProducts();
+      updateCart();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showToast(msg, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.className = 'toast ' + (type === 'error' ? 'error' : '');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    loadConfig();
+    loadProducts();
+    loadOffers();
+  </script>
+</body>
+</html>
