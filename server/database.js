@@ -139,7 +139,7 @@ async function initDatabase() {
 
   // Inicializar config si está vacía
   const configCount = await db.execute('SELECT COUNT(*) as count FROM config');
-  if (configCount.rows[0].count === 0) {
+  if (Number(configCount.rows[0].count) === 0) {
     await db.execute({
       sql: 'INSERT INTO config (id, pickupAddress, deliveryPrice, envioPrice) VALUES (1, ?, ?, ?)',
       args: ['Calle Principal #1, San Juan', 50, 100]
@@ -148,13 +148,14 @@ async function initDatabase() {
 
   // Inicializar admin por defecto si no existe
   const adminCount = await db.execute('SELECT COUNT(*) as count FROM administradores');
-  if (adminCount.rows[0].count === 0) {
+  if (Number(adminCount.rows[0].count) === 0) {
     const bcrypt = require('bcryptjs');
     const hash = bcrypt.hashSync(process.env.ADMIN_PASS || 'admin123', 10);
     await db.execute({
       sql: 'INSERT INTO administradores (username, password_hash) VALUES (?, ?)',
       args: [process.env.ADMIN_USER || 'admin', hash]
     });
+    console.log('[DB] Admin creado: ' + (process.env.ADMIN_USER || 'admin'));
   }
 
   return db;
