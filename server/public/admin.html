@@ -1271,8 +1271,8 @@
             <li><strong>Filtros:</strong> Busca por nombre, número, teléfono o filtra por estado y fecha</li>
             <li><strong>Cambiar estado:</strong> Haz clic en un pedido → selecciona el nuevo estado (Pendiente → Confirmado → Preparando → Listo → Entregado)</li>
             <li><strong>WhatsApp automático:</strong> Al cambiar el estado, se genera un mensaje listo para enviar al cliente</li>
-            <li><strong>Cancelar:</strong> Usa el botón Cancelar para anular un pedido</li>
-            <li><strong>Eliminar:</strong> Borra definitivamente un pedido (solo si es necesario)</li>
+            <li><strong>Cancelar:</strong> Marca el pedido como "Cancelado" (se mantiene en el historial)</li>
+            <li><strong>Eliminar:</strong> Borra permanentemente el pedido de la base de datos (no se puede deshacer)</li>
           </ul>
           <div class="tip">💡 Tip: Los pedidos Pendientes se cancelan automáticamente después de 24 horas sin confirmar.</div>
         </div>
@@ -1860,7 +1860,8 @@
       </div>
       <div class="modal-body" id="modal-detalles"></div>
       <div class="modal-actions" style="padding: 16px 20px; border-top: 1px solid var(--warm);">
-        <button class="btn-delete" onclick="deleteOrder()">🗑️</button>
+        <button class="btn-delete" onclick="cancelOrder()" style="background:#e74c3c;color:white;">❌ Cancelar</button>
+        <button class="btn-delete" onclick="deleteOrder()" title="Eliminar permanentemente">🗑️ Eliminar</button>
         <button class="btn-cancel" onclick="closeModal()">Cerrar</button>
         <button class="btn-edit" onclick="enableEdit()">Editar</button>
       </div>
@@ -3797,19 +3798,38 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       }
     }
 
-    async function deleteOrder() {
+    async function cancelOrder() {
       if (!editingOrder) return;
-      if (!confirm('Eliminar pedido #' + String(editingOrder.numero).padStart(4, '0') + '?')) return;
+      if (!confirm('Cancelar pedido #' + String(editingOrder.numero).padStart(4, '0') + '?')) return;
       try {
         var res = await apiFetch(API_URL + '/api/orders/' + editingOrder.numero, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rowId: editingOrder.id })
+          body: JSON.stringify({ hardDelete: false })
         });
         if (res.ok) {
           closeModal();
           loadData();
-          showToast('Pedido eliminado', 'success');
+          showToast('Pedido cancelado', 'success');
+        }
+      } catch (err) {
+        showToast('Error', 'error');
+      }
+    }
+
+    async function deleteOrder() {
+      if (!editingOrder) return;
+      if (!confirm('ELIMINAR PERMANENTEMENTE el pedido #' + String(editingOrder.numero).padStart(4, '0') + '?\n\nEsta acción NO se puede deshacer.')) return;
+      try {
+        var res = await apiFetch(API_URL + '/api/orders/' + editingOrder.numero, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hardDelete: true })
+        });
+        if (res.ok) {
+          closeModal();
+          loadData();
+          showToast('Pedido eliminado permanentemente', 'success');
         }
       } catch (err) {
         showToast('Error', 'error');
@@ -3819,15 +3839,15 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
     function confirmDelete(numero) {
       editingOrder = orders.find(function (o) { return o.numero === numero; });
       if (!editingOrder) return;
-      document.getElementById('confirm-title').textContent = 'Eliminar pedido?';
-      document.getElementById('confirm-message').textContent = 'Eliminar #' + String(numero).padStart(4, '0') + '?';
+      document.getElementById('confirm-title').textContent = 'Cancelar pedido?';
+      document.getElementById('confirm-message').textContent = 'Cancelar #' + String(numero).padStart(4, '0') + '?';
       document.getElementById('confirm-btn').onclick = function () {
         fetch(API_URL + '/api/orders/' + numero, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rowId: editingOrder.id })
+          body: JSON.stringify({ hardDelete: false })
         })
-          .then(function (r) { if (r.ok) { closeConfirm(); loadData(); showToast('Eliminado', 'success'); } });
+          .then(function (r) { if (r.ok) { closeConfirm(); loadData(); showToast('Pedido cancelado', 'success'); } });
       };
       document.getElementById('confirm-overlay').classList.add('open');
     }
