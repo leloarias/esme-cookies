@@ -1016,6 +1016,25 @@
         grid-template-columns: repeat(2, 1fr);
       }
     }
+
+    .help-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent); color: white; border: none;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      transition: all 0.2s; flex-shrink: 0;
+    }
+    .help-btn:hover { background: var(--primary); transform: scale(1.1); }
+    .help-panel {
+      background: #FFF8E6; border: 2px solid #C9883A; border-radius: 12px;
+      padding: 20px; margin-bottom: 20px; font-size: 0.9rem; color: #2C1810;
+      line-height: 1.7; display: none;
+    }
+    .help-panel.show { display: block; }
+    .help-panel h4 { color: var(--primary); margin: 0 0 12px 0; font-size: 1.1rem; }
+    .help-panel ul { margin: 0; padding-left: 20px; }
+    .help-panel li { margin-bottom: 6px; }
+    .help-panel .tip { background: #d4edda; padding: 10px 14px; border-radius: 8px; margin-top: 12px; color: #155724; font-weight: 500; }
   </style>
   <script src="/socket.io/socket.io.js"></script>
   <style>
@@ -1104,6 +1123,21 @@
       </div>
 
       <div id="tab-dashboard">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">📊 Dashboard</span>
+          <button class="help-btn" onclick="toggleHelp('dashboard')">?</button>
+        </div>
+        <div id="help-dashboard" class="help-panel">
+          <h4>📊 ¿Cómo usar el Dashboard?</h4>
+          <p>El Dashboard es tu <strong>panel principal</strong>. Aquí ves un resumen de todo tu negocio de un vistazo.</p>
+          <ul>
+            <li><strong>Tarjetas superiores:</strong> Total de pedidos, ventas totales, ticket promedio y clientes únicos</li>
+            <li><strong>Filtros de fecha:</strong> Usa los filtros de arriba para ver estadísticas de un mes o día específico</li>
+            <li><strong>Gráficos:</strong> Muestran tus productos más vendidos, distribución por tipo de entrega y tendencias</li>
+            <li><strong>Estado de Resultados:</strong> Resumen financiero con ventas brutas, descuentos, envíos y ventas netas</li>
+          </ul>
+          <div class="tip">💡 Tip: Usa el botón "Exportar Excel" para descargar un reporte completo con todas las estadísticas.</div>
+        </div>
         <div class="filters"
           style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; background: rgba(255,255,255,0.7); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.5);">
           <strong
@@ -1226,6 +1260,22 @@
       </div>
 
       <div id="tab-pedidos" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">📋 Pedidos</span>
+          <button class="help-btn" onclick="toggleHelp('pedidos')">?</button>
+        </div>
+        <div id="help-pedidos" class="help-panel">
+          <h4>📋 ¿Cómo usar Pedidos?</h4>
+          <p>Aquí gestionas <strong>todos los pedidos</strong> de tus clientes.</p>
+          <ul>
+            <li><strong>Filtros:</strong> Busca por nombre, número, teléfono o filtra por estado y fecha</li>
+            <li><strong>Cambiar estado:</strong> Haz clic en un pedido → selecciona el nuevo estado (Pendiente → Confirmado → Preparando → Listo → Entregado)</li>
+            <li><strong>WhatsApp automático:</strong> Al cambiar el estado, se genera un mensaje listo para enviar al cliente</li>
+            <li><strong>Cancelar:</strong> Usa el botón Cancelar para anular un pedido</li>
+            <li><strong>Eliminar:</strong> Borra definitivamente un pedido (solo si es necesario)</li>
+          </ul>
+          <div class="tip">💡 Tip: Los pedidos Pendientes se cancelan automáticamente después de 24 horas sin confirmar.</div>
+        </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
           <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 0;">
             <div class="stat-card" style="border-color: var(--accent);text-align:center;">
@@ -1316,6 +1366,23 @@
       </div>
 
       <div id="tab-productos" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">🍪 Productos</span>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="help-btn" onclick="toggleHelp('productos')">?</button>
+          </div>
+        </div>
+        <div id="help-productos" class="help-panel">
+          <h4>🍪 ¿Cómo usar Productos?</h4>
+          <p>Aquí administras el <strong>catálogo</strong> de lo que vendes.</p>
+          <ul>
+            <li><strong>Agregar:</strong> Haz clic en "+ Agregar" para crear un nuevo producto</li>
+            <li><strong>Editar:</strong> Haz clic en el ícono de lápiz para modificar nombre, precio o imagen</li>
+            <li><strong>Eliminar:</strong> Haz clic en el ícono de basura para quitar un producto</li>
+            <li><strong>Imagen:</strong> Sube una foto clara del producto (se guarda automáticamente)</li>
+          </ul>
+          <div class="tip">💡 Tip: Usa fotos de buena calidad y descripciones atractivas para vender más.</div>
+        </div>
         <div class="section-title"
           style="font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--primary); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
           <span>Productos</span>
@@ -1327,6 +1394,26 @@
       <!-- ========== TAB: PROMOCIONES ========== -->
       <div id="tab-promociones" class="hidden">
         <div style="max-width:900px;margin:0 auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">🎉 Ofertas y Promociones</span>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button class="help-btn" onclick="toggleHelp('promos')">?</button>
+            </div>
+          </div>
+          <div id="help-promos" class="help-panel">
+            <h4>🎉 ¿Cómo usar Promociones?</h4>
+            <p>Crea <strong>ofertas automáticas</strong> que se aplican a los pedidos de tus clientes.</p>
+            <ul>
+              <li><strong>Descuento %:</strong> Ej: 10% de descuento en todos los pedidos</li>
+              <li><strong>Descuento fijo:</strong> Ej: RD$50 de descuento</li>
+              <li><strong>Envío gratis:</strong> Elimina el costo de delivery/envío</li>
+              <li><strong>Lleva X paga Y:</strong> Ej: Lleva 3 paga 2 (BOGO)</li>
+              <li><strong>Compra mínima:</strong> El descuento solo aplica si el cliente gasta cierto monto</li>
+              <li><strong>Fechas y horas:</strong> Programa la promo para que inicie y termine automáticamente</li>
+              <li><strong>Límite de usos:</strong> Define cuántas veces se puede usar (ej: primeros 50 clientes)</li>
+            </ul>
+            <div class="tip">💡 Tip: Las promociones se aplican automáticamente cuando el cliente hace el pedido. No necesitas hacer nada manual.</div>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
             <h2 style="font-family:'Playfair Display',serif;color:var(--primary);">🎉 Ofertas y Promociones</h2>
             <button onclick="openPromoModal()" style="padding:10px 20px;background:var(--accent);color:white;border:none;border-radius:10px;font-weight:600;cursor:pointer;">+ Nueva Oferta</button>
@@ -1450,9 +1537,28 @@
           <!-- Header con estado de tienda -->
           <div style="display:flex; justify-content: space-between; align-items: center; background: white; padding: 20px; border-radius: 16px; box-shadow: var(--shadow-sm); flex-wrap: wrap; gap: 15px;">
              <div>
-                <h2 style="font-family:'Playfair Display',serif; color:var(--primary); margin:0;">⚙️ Configuración</h2>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <h2 style="font-family:'Playfair Display',serif; color:var(--primary); margin:0;">⚙️ Configuración</h2>
+                  <button class="help-btn" onclick="toggleHelp('config')"></button>
+                </div>
                 <p style="color:var(--text-muted); font-size: 0.9rem; margin: 5px 0 0;">Personaliza tu tienda y sistema</p>
              </div>
+             <div id="help-config" class="help-panel" style="width:100%;margin-top:10px;">
+              <h4>⚙️ ¿Cómo usar Configuración?</h4>
+              <p>Aquí ajustas <strong>toda la tienda</strong>. Cambios con efecto inmediato.</p>
+              <ul>
+                <li><strong>Abrir/Cerrar tienda:</strong> El switch de arriba. Si la tienda está cerrada, los clientes no pueden hacer pedidos</li>
+                <li><strong>Dirección de recogida:</strong> La dirección donde los clientes van a buscar sus pedidos</li>
+                <li><strong>Precios de envío:</strong> Define cuánto cobras por delivery y envío nacional</li>
+                <li><strong>Teléfono de la tienda:</strong> Se usa para los mensajes de WhatsApp</li>
+                <li><strong>Cuentas bancarias:</strong> Los datos donde los clientes hacen las transferencias</li>
+                <li><strong>Colores:</strong> Personaliza los colores de tu tienda online</li>
+                <li><strong>Email:</strong> Configura el correo para recibir notificaciones automáticas de pedidos</li>
+                <li><strong>Mensajes:</strong> Personaliza los mensajes que se envían al cliente en cada estado</li>
+                <li><strong>Administradores:</strong> Agrega o cambia contraseñas de otros administradores</li>
+              </ul>
+              <div class="tip">💡 Tip: Para Gmail, usa una "Contraseña de aplicación" (no tu contraseña normal). Busca "contraseña de aplicación Gmail" en Google.</div>
+            </div>
             <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                   <span id="store-status-label" style="font-weight: 700; font-size: 0.9rem;">TIENDA:</span>
                   <label class="switch">
@@ -1635,6 +1741,23 @@
       <!-- TAB: CLIENTES -->
       <div id="tab-clientes" class="hidden">
         <div style="padding: 20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">👥 Gestión de Clientes</span>
+            <button class="help-btn" onclick="toggleHelp('clientes')">?</button>
+          </div>
+          <div id="help-clientes" class="help-panel">
+            <h4>👥 ¿Cómo usar Clientes?</h4>
+            <p>Tu <strong>base de datos de clientes</strong>. Se llena automáticamente cuando alguien hace un pedido.</p>
+            <ul>
+              <li><strong>Registro automático:</strong> Cada vez que alguien hace pedido, se crea o actualiza su registro</li>
+              <li><strong>Buscar:</strong> Usa la barra de búsqueda para encontrar por nombre o teléfono</li>
+              <li><strong>Ver historial:</strong> Cada cliente muestra cuántos pedidos ha hecho y cuánto ha gastado</li>
+              <li><strong>Editar:</strong> Actualiza datos del cliente (dirección, sector, notas)</li>
+              <li><strong>Desactivar:</strong> Si un cliente causa problemas, puedes desactivarlo (no podrá hacer pedidos)</li>
+              <li><strong>Exportar:</strong> Descarga reportes de tus clientes en Excel</li>
+            </ul>
+            <div class="tip">💡 Tip: Los clientes con email registrado recibirán notificaciones automáticas cuando hagan un pedido.</div>
+          </div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:15px;">
             <h2 style="font-family:'Playfair Display',serif; color:var(--primary); margin:0;">👥 Gestión de Clientes</h2>
             <div style="display:flex; gap:10px; align-items:center;">
@@ -2363,6 +2486,11 @@
       var isHidden = content.style.display === 'none' || content.style.display === '';
       content.style.display = isHidden ? 'grid' : 'none';
       icon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+    }
+
+    function toggleHelp(id) {
+      var panel = document.getElementById('help-' + id);
+      if (panel) panel.classList.toggle('show');
     }
 
     // Listeners for color pickers
