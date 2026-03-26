@@ -105,14 +105,21 @@ async function sendCustomerConfirmationEmail(orderData) {
     }
 
     const transporter = getTransporter(config);
-    const cuentasHtml = (config.bankAccounts ? JSON.parse(config.bankAccounts || '[]') : []).map((c, i) => `
+    const bankAccountsArr = config.bankAccounts ? JSON.parse(config.bankAccounts || '[]') : [];
+    
+    // Verificar si todas las cédulas son iguales
+    const cedulas = bankAccountsArr.map(c => (c.cedula || '').trim()).filter(Boolean);
+    const todasIguales = cedulas.length > 1 && cedulas.every(c => c === cedulas[0]);
+    const cedulaUnica = todasIguales ? cedulas[0] : '';
+
+    const cuentasHtml = (cedulaUnica ? `<div style="background:#e8f5e9;padding:12px;border-radius:10px;margin:10px 0;font-weight:600;">📌 Cédula: ${cedulaUnica}</div>` : '') +
+      bankAccountsArr.map((c, i) => `
       <div style="background:#FEF9F3;padding:16px;border-radius:10px;margin:10px 0;border:1px solid #E8DCC8;">
-        <div style="font-weight:700;color:#2C1810;margin-bottom:8px;">📌 Cuenta ${i + 1}</div>
+        <div style="font-weight:700;color:#2C1810;margin-bottom:8px;">🏦 Cuenta ${i + 1}: ${c.banco}</div>
         <div style="color:#555;line-height:1.8;">
-          🏦 Banco: ${c.banco}<br>
-          📝 Tipo: ${c.tipo}<br>
-          🔢 No. Cuenta: ${c.numero}<br>
+          ${c.tipo}: ${c.numero}<br>
           👤 Titular: ${c.titular}
+          ${!cedulaUnica && c.cedula ? `<br>📌 Cédula: ${c.cedula}` : ''}
         </div>
       </div>
     `).join('');

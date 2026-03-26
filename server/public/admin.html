@@ -2563,7 +2563,7 @@
     var bankAccounts = [];
     
     function addBankAccount() {
-      bankAccounts.push({ id: Date.now(), banco: '', numero: '', titular: '', tipo: 'Ahorros' });
+      bankAccounts.push({ id: Date.now(), banco: '', numero: '', titular: '', cedula: '', tipo: 'Ahorros' });
       renderBankAccounts();
     }
     
@@ -2588,37 +2588,45 @@
           '</div>' +
           '<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">' +
             '<div class="form-group" style="margin:0;"><label>Número de Cuenta</label><input type="text" id="bank-numero-' + b.id + '" value="' + (b.numero || '') + '" placeholder="000-0000000-0"></div>' +
-            '<div class="form-group" style="margin:0;"><label>Nombre del Titular</label><input type="text" id="bank-titular-' + b.id + '" value="' + (b.titular || '') + '" placeholder="Nombre completo"></div>' +
+            '<div class="form-group" style="margin:0;"><label>Cédula (opcional)</label><input type="text" id="bank-cedula-' + b.id + '" value="' + (b.cedula || '') + '" placeholder="000-0000000-0"></div>' +
           '</div>' +
-          '<button onclick="removeBankAccount(' + b.id + ')" style="padding:8px 16px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">🗑️ Eliminar</button>' +
+          '<div style="display:grid; grid-template-columns:1fr auto; gap:12px; align-items:end;">' +
+            '<div class="form-group" style="margin:0;"><label>Nombre del Titular</label><input type="text" id="bank-titular-' + b.id + '" value="' + (b.titular || '') + '" placeholder="Nombre completo"></div>' +
+            '<button onclick="removeBankAccount(' + b.id + ')" style="padding:8px 16px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; height:fit-content;">🗑️</button>' +
+          '</div>' +
         '</div>';
       }).join('');
     }
     
-    function saveBankAccounts() {
+    async function saveBankAccounts() {
       var accounts = bankAccounts.map(function(b) {
         return {
           id: b.id,
           banco: document.getElementById('bank-banco-' + b.id).value.trim(),
           numero: document.getElementById('bank-numero-' + b.id).value.trim(),
           titular: document.getElementById('bank-titular-' + b.id).value.trim(),
+          cedula: (document.getElementById('bank-cedula-' + b.id) || {}).value ? document.getElementById('bank-cedula-' + b.id).value.trim() : '',
           tipo: document.getElementById('bank-tipo-' + b.id).value
         };
       }).filter(function(b) { return b.banco && b.numero && b.titular; });
       
-      apiFetch(API_URL + '/api/config', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ bankAccounts: accounts }) // Enviar como array
-      }).then(function(res) {
-        if (res.ok) {
+      try {
+        var res = await apiFetch(API_URL + '/api/config', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ bankAccounts: accounts })
+        });
+        var data = await res.json();
+        if (res.ok && data.success) {
+          bankAccounts = accounts;
           showToast('Cuentas bancarias guardadas ✅', 'success');
-          bankAccounts = accounts; // Actualizar global
           renderBankAccounts();
         } else {
-          showToast('Error al guardar', 'error');
+          showToast('Error al guardar: ' + (data.error || 'Desconocido'), 'error');
         }
-      }).catch(function() { showToast('Error de conexión', 'error'); });
+      } catch(err) {
+        showToast('Error de conexión: ' + err.message, 'error');
+      }
     }
     
     function loadBankAccounts() {
@@ -2630,8 +2638,9 @@
           bankAccounts = data;
         }
         bankAccounts = bankAccounts.map(function(b) { 
-          if (!b.id) b.id = Date.now() + Math.random(); 
-          return b; 
+          if (!b.id) b.id = Date.now() + Math.random();
+          if (!b.cedula) b.cedula = '';
+          return b;
         });
         renderBankAccounts();
       } catch(e) { 
@@ -3932,13 +3941,23 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       // Preparar cuentas bancarias
       var cuentasBancariasMsg = '';
       if (bankAccountsList.length > 0) {
-        cuentasBancariasMsg = '';
+        // Verificar si todas las cédulas son iguales
+        var cedulas = bankAccountsList.map(function(c) { return (c.cedula || '').trim(); }).filter(Boolean);
+        var todasIguales = cedulas.length > 1 && cedulas.every(function(c) { return c === cedulas[0]; });
+        var cedulaUnica = todasIguales ? cedulas[0] : '';
+
+        if (cedulaUnica) {
+          cuentasBancariasMsg += '\n📌 Cédula: ' + cedulaUnica;
+        }
+
         bankAccountsList.forEach(function(c, i) {
-          cuentasBancariasMsg += '\n\n📌 Cuenta ' + (i + 1) + ':';
-          cuentasBancariasMsg += '\n🏦 ' + c.banco;
-          cuentasBancariasMsg += '\n📝 ' + c.tipo;
-          cuentasBancariasMsg += '\n🔢 ' + c.numero;
+          cuentasBancariasMsg += '\n\n🏦 Cuenta ' + (i + 1) + ':';
+          cuentasBancariasMsg += '\n' + c.banco;
+          cuentasBancariasMsg += '\n' + c.tipo + ': ' + c.numero;
           cuentasBancariasMsg += '\n👤 ' + c.titular;
+          if (!cedulaUnica && c.cedula) {
+            cuentasBancariasMsg += '\n📌 Cédula: ' + c.cedula;
+          }
         });
       }
       
@@ -3979,9 +3998,20 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         var descuentoMsg = order.descuento > 0 ? '\n🎉 Descuento: -RD$ ' + (order.descuento || 0).toLocaleString() : '';
         var bankMsg = '';
         if (bankAccountsList.length > 0) {
+          // Verificar si todas las cédulas son iguales
+          var cedulas = bankAccountsList.map(function(c) { return (c.cedula || '').trim(); }).filter(Boolean);
+          var todasIguales = cedulas.length > 1 && cedulas.every(function(c) { return c === cedulas[0]; });
+          var cedulaUnica = todasIguales ? cedulas[0] : '';
+
           bankMsg = '\n\n*💳 CUENTAS PARA TRANSFERENCIA:*';
+          if (cedulaUnica) {
+            bankMsg += '\n📌 Cédula: ' + cedulaUnica;
+          }
           bankAccountsList.forEach(function(c, i) {
-            bankMsg += '\n\n📌 Cuenta ' + (i + 1) + ':\n🏦 ' + c.banco + '\n📝 ' + c.tipo + '\n🔢 ' + c.numero + '\n👤 ' + c.titular;
+            bankMsg += '\n\n🏦 Cuenta ' + (i + 1) + ':\n' + c.banco + '\n' + c.tipo + ': ' + c.numero + '\n👤 ' + c.titular;
+            if (!cedulaUnica && c.cedula) {
+              bankMsg += '\n📌 Cédula: ' + c.cedula;
+            }
           });
         }
         return '🍪 *ESME COOKIES*\n\n' +
