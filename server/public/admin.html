@@ -2001,6 +2001,7 @@
         if (res.ok) orders = await res.json();
         var pres = await apiFetch(API_URL + '/api/products');
         if (pres.ok) products = await pres.json();
+        await loadPromos();
         renderDashboard();
         renderOrders();
         renderPreparacion();
@@ -2791,11 +2792,11 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         await loadConfig();
         populateDateFilters();
         populateDashDateFilters();
+        await loadPromos();
         renderDashboard();
         updatePedidosCounters();
         renderOrders();
         renderProducts();
-        loadPromos();
 
         if (btn) btn.textContent = 'Actualizar';
         showToast('Actualizado: ' + orders.length + ' pedidos', 'success');
