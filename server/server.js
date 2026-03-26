@@ -486,7 +486,7 @@ async function saveClientFromOrder(cliente, telefono, direccion, sector, total, 
   try {
     const descuentoNum = parseFloat(descuento) || 0;
     const telefonoNorm = telefono.replace(/[-\s]/g, '');
-    const existing = await prepare('SELECT * FROM clientes WHERE REPLACE(REPLACE(telefono, "-", ""), " ", "") = ?').get(telefonoNorm);
+    const existing = await prepare('SELECT id, nombre, activo FROM clientes WHERE telefono = ?').get(telefonoNorm);
     if (existing) {
       await prepare('UPDATE clientes SET nombre=?, direccion=?, sector=?, total_pedidos=total_pedidos+1, total_gastado=total_gastado+?, total_descuentos=total_descuentos+?, ultimo_pedido=? WHERE id=?')
         .run(cliente, direccion || '', sector || '', total, descuentoNum, new Date().toISOString(), existing.id);
@@ -1044,7 +1044,7 @@ async function startServer() {
         const currentTime = parts[1] ? parts[1].substring(0, 5) : "00:00";
 
         const expiredPromos = await prepare(
-          'SELECT * FROM promociones WHERE activa = 1 AND fecha_fin != "" AND fecha_fin < ?'
+          'SELECT id, titulo FROM promociones WHERE activa = 1 AND fecha_fin IS NOT NULL AND fecha_fin < ?'
         ).all(currentDate);
 
         if (expiredPromos.length > 0) {
