@@ -3219,12 +3219,12 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       });
 
       document.getElementById('stat-total').textContent = dashOrders.length;
-      var ventas = dashOrders.reduce(function (s, o) { return s + ((o.estado !== 'Cancelado' ? o.total : 0) || 0); }, 0);
-      document.getElementById('stat-sales').textContent = 'RD$' + ventas.toLocaleString();
+      var ventas = dashOrders.reduce(function (s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.total) || 0) : 0); }, 0);
+      document.getElementById('stat-sales').textContent = 'RD$' + Math.round(ventas).toLocaleString();
 
       var nonCancelledOrders = dashOrders.filter(function (o) { return o.estado !== 'Cancelado'; });
-      var ticketPromedio = nonCancelledOrders.length > 0 ? (ventas / nonCancelledOrders.length) : 0;
-      if (document.getElementById('stat-avg')) document.getElementById('stat-avg').textContent = 'RD$' + Math.round(ticketPromedio).toLocaleString();
+      var ticketPromedio = nonCancelledOrders.length > 0 ? Math.round(ventas / nonCancelledOrders.length) : 0;
+      if (document.getElementById('stat-avg')) document.getElementById('stat-avg').textContent = 'RD$' + ticketPromedio.toLocaleString();
 
       var clientesUnicos = [...new Set(nonCancelledOrders.map(function (o) { return (o.cliente || '').toLowerCase().trim(); }).filter(Boolean))].length;
       if (document.getElementById('stat-clients')) document.getElementById('stat-clients').textContent = clientesUnicos;
@@ -3236,7 +3236,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var cancelados = dashOrders.filter(function (o) { return o.estado === 'Cancelado'; }).length;
       if (document.getElementById('stat-cancelled')) document.getElementById('stat-cancelled').textContent = cancelados;
 
-      var totalUnits = 0;
+      var totalUnits = dashOrders.reduce(function (s, o) { return s + (parseFloat(o.cantidad) || 0); }, 0);
       var prodCounts = {};
       nonCancelledOrders.forEach(function (o) {
         if (o.productos) {
@@ -3367,10 +3367,10 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var pedidosCancelados = dashOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length;
       var pedidosExitosos = totalPedidos - pedidosCancelados;
       
-      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (o.subtotal || 0); }, 0);
-      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (o.descuento || 0); }, 0);
-      var envioTotal = dashOrders.reduce(function(s, o) { return s + (o.envio || 0); }, 0);
-      var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (o.total || 0) : 0); }, 0);
+      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.subtotal) || 0); }, 0);
+      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.descuento) || 0); }, 0);
+      var envioTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.envio) || 0); }, 0);
+      var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.total) || 0) : 0); }, 0);
       
       var porTipo = { pickup: 0, delivery: 0, envio: 0 };
       var porEstado = { Pendiente: 0, 'Esperando Pago': 0, Confirmado: 0, Preparando: 0, Listo: 0, Entregado: 0, Cancelado: 0 };
@@ -3385,31 +3385,30 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       // Resumen General
       html += '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:15px;">';
       html += '<div style="background:linear-gradient(135deg, #2C1810 0%, #4a3728 100%); padding:20px; border-radius:12px; color:white;">';
-      html += '<div style="font-size:0.85rem; opacity:0.8; margin-bottom:8px;">Total Pedidos</div>';
-      html += '<div style="font-size:2rem; font-weight:700;">' + totalPedidos + '</div>';
+      html += '<div style="font-size:0.85rem; opacity:0.8; margin-bottom:8px;">Ventas Netas</div>';
+      html += '<div style="font-size:1.8rem; font-weight:700;">RD$ ' + Math.round(ventasNetas).toLocaleString() + '</div>';
       html += '</div>';
+      
       html += '<div style="background:linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); padding:20px; border-radius:12px; color:white;">';
       html += '<div style="font-size:0.85rem; opacity:0.8; margin-bottom:8px;">Pedidos Exitosos</div>';
-      html += '<div style="font-size:2rem; font-weight:700;">' + pedidosExitosos + '</div>';
+      html += '<div style="font-size:1.8rem; font-weight:700;">' + pedidosExitosos + '</div>';
       html += '</div>';
+      
       html += '<div style="background:linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); padding:20px; border-radius:12px; color:white;">';
-      html += '<div style="font-size:0.85rem; opacity:0.8; margin-bottom:8px;">Cancelados</div>';
-      html += '<div style="font-size:2rem; font-weight:700;">' + pedidosCancelados + '</div>';
+      html += '<div style="font-size:0.85rem; opacity:0.8; margin-bottom:8px;">Pedidos Cancelados</div>';
+      html += '<div style="font-size:1.8rem; font-weight:700;">' + pedidosCancelados + '</div>';
       html += '</div>';
-      html += '<div style="background:linear-gradient(135deg, #C9883A 0%, #D9A036 100%); padding:20px; border-radius:12px; color:white;">';
-      html += '<div style="font-size:0.85rem; opacity:0.8; margin-bottom:8px;">Ventas Netas</div>';
-      html += '<div style="font-size:2rem; font-weight:700;">RD$ ' + ventasNetas.toLocaleString() + '</div>';
-      html += '</div>';
+      
       html += '</div>';
       
       // Estado de Resultados
       html += '<div style="background:white; padding:20px; border-radius:12px; border:2px solid var(--warm);">';
       html += '<h4 style="margin:0 0 15px 0; color:var(--primary); font-size:1rem;">📋 Estado de Resultados</h4>';
       html += '<table style="width:100%; border-collapse:collapse; font-size:0.9rem;">';
-      html += '<tr style="border-bottom:1px solid #eee;"><td style="padding:8px 0;">Ventas Brutas (Subtotal)</td><td style="text-align:right; font-weight:600;">RD$ ' + subtotalTotal.toLocaleString() + '</td></tr>';
-      html += '<tr style="border-bottom:1px solid #eee; color:#e74c3c;"><td style="padding:8px 0;">(-) Descuentos Otorgados</td><td style="text-align:right; font-weight:600;">-RD$ ' + descuentosTotal.toLocaleString() + '</td></tr>';
-      html += '<tr style="border-bottom:1px solid #eee;"><td style="padding:8px 0;">(+) Ingresos por Envío</td><td style="text-align:right; font-weight:600;">RD$ ' + envioTotal.toLocaleString() + '</td></tr>';
-      html += '<tr style="background:var(--cream); font-weight:700;"><td style="padding:12px 0;">= Ventas Netas</td><td style="text-align:right; font-size:1.1rem; color:var(--primary);">RD$ ' + ventasNetas.toLocaleString() + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #eee;"><td style="padding:8px 0;">Ventas Brutas (Subtotal)</td><td style="text-align:right; font-weight:600;">RD$ ' + Math.round(subtotalTotal).toLocaleString() + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #eee; color:#e74c3c;"><td style="padding:8px 0;">(-) Descuentos Otorgados</td><td style="text-align:right; font-weight:600;">-RD$ ' + Math.round(descuentosTotal).toLocaleString() + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #eee;"><td style="padding:8px 0;">(+) Ingresos por Envío</td><td style="text-align:right; font-weight:600;">RD$ ' + Math.round(envioTotal).toLocaleString() + '</td></tr>';
+      html += '<tr style="background:var(--cream); font-weight:700;"><td style="padding:12px 0;">= Ventas Netas</td><td style="text-align:right; font-size:1.1rem; color:var(--primary);">RD$ ' + Math.round(ventasNetas).toLocaleString() + '</td></tr>';
       html += '</table>';
       html += '</div>';
       
@@ -3484,10 +3483,10 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var totalPedidos = dashOrders.length;
       var pedidosCancelados = dashOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length;
       var pedidosExitosos = totalPedidos - pedidosCancelados;
-      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (o.subtotal || 0); }, 0);
-      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (o.descuento || 0); }, 0);
-      var envioTotal = dashOrders.reduce(function(s, o) { return s + (o.envio || 0); }, 0);
-      var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (o.total || 0) : 0); }, 0);
+      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.subtotal) || 0); }, 0);
+      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.descuento) || 0); }, 0);
+      var envioTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.envio) || 0); }, 0);
+      var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.total) || 0) : 0); }, 0);
       
       var csv = 'ESME COOKIES - REPORTE CONTABLE\n';
       csv += periodo + '\n\n';
