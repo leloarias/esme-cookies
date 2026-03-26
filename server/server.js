@@ -1043,17 +1043,21 @@ async function startServer() {
         const currentDate = parts[0];
         const currentTime = parts[1] ? parts[1].substring(0, 5) : "00:00";
 
-        const expiredPromos = await prepare(
-          'SELECT id, titulo FROM promociones WHERE activa = 1 AND fecha_fin IS NOT NULL AND fecha_fin < ?'
-        ).all(currentDate);
+        try {
+          const expiredPromos = await prepare(
+            'SELECT id, titulo FROM promociones WHERE activa = 1 AND fecha_fin < ?'
+          ).all(currentDate);
 
-        if (expiredPromos.length > 0) {
-          for (const p of expiredPromos) {
-            console.log(`[Promo] Expirando automaticamente: ${p.titulo}`);
-            await prepare('UPDATE promociones SET activa = 0 WHERE id = ?').run(p.id);
-            io.emit('promo_expirada', { id: p.id, titulo: p.titulo });
+          if (expiredPromos.length > 0) {
+            for (const p of expiredPromos) {
+              console.log(`[Promo] Expirando automaticamente: ${p.titulo}`);
+              await prepare('UPDATE promociones SET activa = 0 WHERE id = ?').run(p.id);
+              io.emit('promo_expirada', { id: p.id, titulo: p.titulo });
+            }
+            io.emit('ofertas_update');
           }
-          io.emit('ofertas_update');
+        } catch (promoErr) {
+          console.error('Error verificando promos:', promoErr.message);
         }
 
         const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
