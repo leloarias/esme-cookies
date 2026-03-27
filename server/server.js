@@ -279,9 +279,11 @@ app.get('/api/public-config', async (req, res) => {
 app.post('/api/clientes/recalcular', verifyToken, async (req, res) => {
   try {
     const clientes = await prepare('SELECT id, telefono FROM clientes').all();
-    const pedidos = await prepare('SELECT telefono, estado, total, descuento, fecha FROM pedidos').all();
+    const pedidos = await prepare('SELECT telefono, estado, total, descuento, fecha, cliente FROM pedidos').all();
     let actualizados = 0;
+    let creados = 0;
 
+    // Actualizar clientes existentes
     for (const c of clientes) {
       const cTel = normalizePhone(c.telefono);
       const pedidosCliente = pedidos.filter(p => normalizePhone(p.telefono) === cTel);
@@ -296,7 +298,26 @@ app.post('/api/clientes/recalcular', verifyToken, async (req, res) => {
       actualizados++;
     }
 
-    res.json({ success: true, actualizados });
+    // Crear clientes que tienen pedidos pero no existen
+    const telefonosClientes = new Set(clientes.map(c => normalizePhone(c.telefono)));
+    const telefonosPedidos = [...new Set(pedidos.map(p => normalizePhone(p.telefono)))];
+    
+    for (const tel of telefonosPedidos) {
+      if (!telefonosClientes.has(tel)) {
+        const pedido = pedidos.find(p => normalizePhone(p.telefono) === tel);
+        const pedidosCliente = pedidos.filter(p => normalizePhone(p.telefono) === tel);
+        const pedidosActivos = pedidosCliente.filter(p => p.estado !== 'Cancelado');
+        const gastado = pedidosActivos.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
+        const descuentos = pedidosActivos.reduce((s, p) => s + (parseFloat(p.descuento) || 0), 0);
+        const ultimo = pedidosCliente.length > 0 ? pedidosCliente[pedidosCliente.length - 1].fecha : null;
+
+        await prepare('INSERT INTO clientes (nombre, telefono, total_pedidos, total_gastado, total_descuentos, ultimo_pedido, activo) VALUES (?, ?, ?, ?, ?, ?, 1)')
+          .run(pedido ? pedido.cliente : 'Cliente', tel, pedidosActivos.length, gastado, descuentos, ultimo);
+        creados++;
+      }
+    }
+
+    res.json({ success: true, actualizados, creados });
   } catch (err) {
     console.error('Error recalculando clientes:', err);
     res.status(500).json({ error: 'Error al recalcular' });
@@ -521,17 +542,36 @@ async function saveClientFromOrder(cliente, telefono, direccion, sector, total, 
     const descuentoNum = parseFloat(descuento) || 0;
     const telefonoNorm = normalizePhone(telefono);
     if (!telefonoNorm) return;
+    const totalNum = parseFloat(total) || 0;
     const existing = await prepare('SELECT id, nombre, activo FROM clientes WHERE telefono = ?').get(telefonoNorm);
     if (existing) {
       await prepare('UPDATE clientes SET nombre=?, direccion=?, sector=?, total_pedidos=total_pedidos+1, total_gastado=total_gastado+?, total_descuentos=total_descuentos+?, ultimo_pedido=? WHERE id=?')
-        .run(cliente, direccion || '', sector || '', total, descuentoNum, new Date().toISOString(), existing.id);
+        .run(cliente, direccion || '', sector || '', totalNum, descuentoNum, new Date().toISOString(), existing.id);
     } else {
       await prepare('INSERT INTO clientes (nombre, telefono, direccion, sector, total_pedidos, total_gastado, total_descuentos, ultimo_pedido, activo) VALUES (?, ?, ?, ?, 1, ?, ?, ?, 1)')
-        .run(cliente, telefonoNorm, direccion || '', sector || '', total, descuentoNum, new Date().toISOString());
+        .run(cliente, telefonoNorm, direccion || '', sector || '', totalNum, descuentoNum, new Date().toISOString());
     }
-    console.log('Client saved successfully');
+    console.log('Client saved:', telefonoNorm);
   } catch (err) {
     console.error('Error guardando cliente:', err);
+  }
+}
+
+async function ensureClientExists(telefono, nombre) {
+  try {
+    const telefonoNorm = normalizePhone(telefono);
+    if (!telefonoNorm) return null;
+    const existing = await prepare('SELECT id FROM clientes WHERE telefono = ?').get(telefonoNorm);
+    if (!existing) {
+      const info = await prepare('INSERT INTO clientes (nombre, telefono, total_pedidos, total_gastado, total_descuentos, activo) VALUES (?, ?, 0, 0, 0, 1)')
+        .run(nombre || 'Cliente', telefonoNorm);
+      console.log('Cliente creado automáticamente:', telefonoNorm);
+      return info.lastInsertRowid;
+    }
+    return existing.id;
+  } catch (err) {
+    console.error('Error asegurando cliente:', err);
+    return null;
   }
 }
 
@@ -933,13 +973,15 @@ app.put('/api/orders/:num', verifyToken, async (req, res) => {
       const telNorm = normalizePhone(existing.telefono);
       
       if (existing.estado === 'Cancelado' && estado !== 'Cancelado') {
+        await ensureClientExists(telNorm, existing.cliente);
         await prepare('UPDATE clientes SET total_gastado = total_gastado + ?, total_descuentos = total_descuentos + ? WHERE telefono = ?')
           .run(orderTotal, orderDescuento, telNorm);
-        console.log('[PUT Order] Pedido reactivado, sumado al cliente:', telNorm);
+        console.log('[PUT Order] Reactivado, sumado al cliente:', telNorm);
       } else if (existing.estado !== 'Cancelado' && estado === 'Cancelado') {
+        await ensureClientExists(telNorm, existing.cliente);
         await prepare('UPDATE clientes SET total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
           .run(orderTotal, orderDescuento, telNorm);
-        console.log('[PUT Order] Pedido cancelado, restado del cliente:', telNorm);
+        console.log('[PUT Order] Cancelado, restado del cliente:', telNorm);
       }
     }
     
@@ -957,15 +999,16 @@ app.delete('/api/orders/:num', verifyToken, async (req, res) => {
 
   try {
     if (hardDelete) {
-      const order = await prepare('SELECT telefono, total, descuento FROM pedidos WHERE numero = ?').get(num);
+      const order = await prepare('SELECT telefono, total, descuento, cliente FROM pedidos WHERE numero = ?').get(num);
       if (order && order.telefono) {
         const telNorm = normalizePhone(order.telefono);
+        await ensureClientExists(telNorm, order.cliente);
         await prepare('UPDATE clientes SET total_pedidos = MAX(0, total_pedidos - 1), total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
           .run(parseFloat(order.total) || 0, parseFloat(order.descuento) || 0, telNorm);
       }
       await prepare('DELETE FROM pedidos WHERE numero = ?').run(num);
     } else {
-      const order = await prepare('SELECT estado, telefono, total, descuento, estado_timestamps FROM pedidos WHERE numero = ?').get(num);
+      const order = await prepare('SELECT estado, telefono, total, descuento, cliente, estado_timestamps FROM pedidos WHERE numero = ?').get(num);
       if (order) {
         let timestamps = {};
         try { timestamps = JSON.parse(order.estado_timestamps || '{}'); } catch(e){}
@@ -973,6 +1016,7 @@ app.delete('/api/orders/:num', verifyToken, async (req, res) => {
         await prepare('UPDATE pedidos SET estado = ?, estado_timestamps = ? WHERE numero = ?').run('Cancelado', JSON.stringify(timestamps), num);
         if (order.estado !== 'Cancelado' && order.telefono) {
           const telNorm = normalizePhone(order.telefono);
+          await ensureClientExists(telNorm, order.cliente);
           await prepare('UPDATE clientes SET total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
             .run(parseFloat(order.total) || 0, parseFloat(order.descuento) || 0, telNorm);
         }
