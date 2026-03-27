@@ -278,27 +278,46 @@ app.get('/api/public-config', async (req, res) => {
 // Recalcular totales de clientes desde pedidos reales
 app.post('/api/clientes/recalcular', verifyToken, async (req, res) => {
   try {
-    const clientes = await prepare('SELECT id, telefono FROM clientes').all();
+    let clientes = await prepare('SELECT id, telefono, nombre FROM clientes').all();
     const pedidos = await prepare('SELECT telefono, estado, total, descuento, fecha, cliente FROM pedidos').all();
     let actualizados = 0;
     let creados = 0;
+    let eliminados = 0;
 
-    // Actualizar clientes existentes
+    // 1. Fusionar clientes duplicados (mismo teléfono normalizado)
+    const phoneMap = {};
+    for (const c of clientes) {
+      const norm = normalizePhone(c.telefono);
+      if (phoneMap[norm]) {
+        // Ya existe un cliente con este teléfono → eliminar el duplicado
+        const keep = phoneMap[norm];
+        // Sumar datos del duplicado al principal
+        await prepare('UPDATE clientes SET total_pedidos = total_pedidos + ?, total_gastado = total_gastado + ?, total_descuentos = total_descuentos + ? WHERE id = ?')
+          .run(c.total_pedidos || 0, c.total_gastado || 0, c.total_descuentos || 0, keep.id);
+        await prepare('DELETE FROM clientes WHERE id = ?').run(c.id);
+        eliminados++;
+        console.log('[Recalc] Duplicado eliminado:', c.telefono, '→', keep.telefono);
+      } else {
+        phoneMap[norm] = c;
+      }
+    }
+
+    // 2. Actualizar clientes desde pedidos reales
+    clientes = await prepare('SELECT id, telefono, nombre FROM clientes').all();
     for (const c of clientes) {
       const cTel = normalizePhone(c.telefono);
       const pedidosCliente = pedidos.filter(p => normalizePhone(p.telefono) === cTel);
-
       const pedidosActivos = pedidosCliente.filter(p => p.estado !== 'Cancelado');
       const gastado = pedidosActivos.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
       const descuentos = pedidosActivos.reduce((s, p) => s + (parseFloat(p.descuento) || 0), 0);
       const ultimo = pedidosCliente.length > 0 ? pedidosCliente[pedidosCliente.length - 1].fecha : null;
-
-      await prepare('UPDATE clientes SET total_pedidos = ?, total_gastado = ?, total_descuentos = ?, ultimo_pedido = ? WHERE id = ?')
-        .run(pedidosActivos.length, gastado, descuentos, ultimo, c.id);
+      await prepare('UPDATE clientes SET telefono = ?, total_pedidos = ?, total_gastado = ?, total_descuentos = ?, ultimo_pedido = ? WHERE id = ?')
+        .run(cTel, pedidosActivos.length, gastado, descuentos, ultimo, c.id);
       actualizados++;
     }
 
-    // Crear clientes que tienen pedidos pero no existen
+    // 3. Crear clientes que tienen pedidos pero no existen
+    clientes = await prepare('SELECT telefono FROM clientes').all();
     const telefonosClientes = new Set(clientes.map(c => normalizePhone(c.telefono)));
     const telefonosPedidos = [...new Set(pedidos.map(p => normalizePhone(p.telefono)))];
     
@@ -310,14 +329,13 @@ app.post('/api/clientes/recalcular', verifyToken, async (req, res) => {
         const gastado = pedidosActivos.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
         const descuentos = pedidosActivos.reduce((s, p) => s + (parseFloat(p.descuento) || 0), 0);
         const ultimo = pedidosCliente.length > 0 ? pedidosCliente[pedidosCliente.length - 1].fecha : null;
-
         await prepare('INSERT INTO clientes (nombre, telefono, total_pedidos, total_gastado, total_descuentos, ultimo_pedido, activo) VALUES (?, ?, ?, ?, ?, ?, 1)')
           .run(pedido ? pedido.cliente : 'Cliente', tel, pedidosActivos.length, gastado, descuentos, ultimo);
         creados++;
       }
     }
 
-    res.json({ success: true, actualizados, creados });
+    res.json({ success: true, actualizados, creados, eliminados });
   } catch (err) {
     console.error('Error recalculando clientes:', err);
     res.status(500).json({ error: 'Error al recalcular' });
