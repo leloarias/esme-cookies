@@ -643,11 +643,11 @@ app.put('/api/products/:id', verifyToken, async (req, res) => {
     if (!current) return res.status(404).json({ error: 'Producto no encontrado' });
 
     await prepare('UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ? WHERE id = ?')
-      .run(nombre || current.nombre, precio || current.precio, descripcion !== undefined ? descripcion : current.descripcion, imagen !== undefined ? imagen : current.imagen, id);
+      .run(nombre || current.nombre, precio || current.precio, descripcion || '', imagen || '', id);
     res.json({ success: true });
   } catch (err) {
     console.error('Error actualizando producto:', err);
-    res.status(500).json({ error: 'Error al actualizar producto' });
+    res.status(500).json({ error: 'Error al actualizar producto: ' + err.message });
   }
 });
 

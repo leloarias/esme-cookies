@@ -4501,7 +4501,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       if (!nombre || !precio) { showToast('Completa campos requeridos', 'error'); return; }
 
       try {
-        var imagen = null;
+        var imagen = '';
         if (imagenData && imagenData.startsWith('data:')) {
           var res = await apiFetch(API_URL + '/api/upload-image', {
             method: 'POST',
@@ -4511,13 +4511,15 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           if (res.ok) {
             var data = await res.json();
             imagen = data.url;
+          } else {
+            showToast('Error subiendo imagen', 'error');
+            return;
           }
         } else if (imagenData && !imagenData.startsWith('data:')) {
           imagen = imagenData;
         }
 
-        var productData = { nombre: nombre, precio: precio, descripcion: descripcion };
-        if (imagen) productData.imagen = imagen;
+        var productData = { nombre: nombre, precio: precio, descripcion: descripcion, imagen: imagen };
 
         var url = editingProduct ? API_URL + '/api/products/' + editingProduct : API_URL + '/api/products';
         var method = editingProduct ? 'PUT' : 'POST';
