@@ -16,9 +16,9 @@ const { sendNewOrderEmail } = require('./email');
 
 // Configurar Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'daxgzly20',
-  api_key: process.env.CLOUDINARY_API_KEY || '419236225556823',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'VNwvPq4HSMOLGBW3pl1Ehszh2uk'
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 const app = express();
