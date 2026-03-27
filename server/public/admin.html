@@ -3370,9 +3370,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var pedidosCancelados = dashOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length;
       var pedidosExitosos = totalPedidos - pedidosCancelados;
       
-      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.subtotal) || 0); }, 0);
-      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.descuento) || 0); }, 0);
-      var envioTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.envio) || 0); }, 0);
+      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.subtotal) || 0) : 0); }, 0);
+      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.descuento) || 0) : 0); }, 0);
+      var envioTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.envio) || 0) : 0); }, 0);
       var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.total) || 0) : 0); }, 0);
       
       var porTipo = { pickup: 0, delivery: 0, envio: 0 };
@@ -3486,9 +3486,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var totalPedidos = dashOrders.length;
       var pedidosCancelados = dashOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length;
       var pedidosExitosos = totalPedidos - pedidosCancelados;
-      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.subtotal) || 0); }, 0);
-      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.descuento) || 0); }, 0);
-      var envioTotal = dashOrders.reduce(function(s, o) { return s + (parseFloat(o.envio) || 0); }, 0);
+      var subtotalTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.subtotal) || 0) : 0); }, 0);
+      var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.descuento) || 0) : 0); }, 0);
+      var envioTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.envio) || 0) : 0); }, 0);
       var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.total) || 0) : 0); }, 0);
       
       var csv = 'ESME COOKIES - REPORTE CONTABLE\n';

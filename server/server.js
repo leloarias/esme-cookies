@@ -891,6 +891,24 @@ app.put('/api/orders/:num', verifyToken, async (req, res) => {
     
     await prepare(sql).run(...updateValues);
     
+    // Manejar cambio de estado para contabilidad del cliente
+    if (estado && estado !== existing.estado) {
+      const orderTotal = parseFloat(existing.total) || 0;
+      const orderDescuento = parseFloat(existing.descuento) || 0;
+      
+      if (existing.estado === 'Cancelado' && estado !== 'Cancelado') {
+        // Reactivar: sumar de nuevo al cliente
+        await prepare('UPDATE clientes SET total_gastado = total_gastado + ?, total_descuentos = total_descuentos + ? WHERE telefono = ?')
+          .run(orderTotal, orderDescuento, existing.telefono);
+        console.log('[PUT Order] Pedido reactivado, sumado al cliente:', existing.telefono);
+      } else if (existing.estado !== 'Cancelado' && estado === 'Cancelado') {
+        // Cancelar: restar del cliente
+        await prepare('UPDATE clientes SET total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
+          .run(orderTotal, orderDescuento, existing.telefono);
+        console.log('[PUT Order] Pedido cancelado, restado del cliente:', existing.telefono);
+      }
+    }
+    
     console.log('[PUT Order] Success:', num, 'New state:', estado);
     res.json({ success: true });
   } catch(err) {
@@ -905,13 +923,25 @@ app.delete('/api/orders/:num', verifyToken, async (req, res) => {
 
   try {
     if (hardDelete) {
+      const order = await prepare('SELECT telefono, total, descuento FROM pedidos WHERE numero = ?').get(num);
+      if (order && order.telefono) {
+        await prepare('UPDATE clientes SET total_pedidos = MAX(0, total_pedidos - 1), total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
+          .run(parseFloat(order.total) || 0, parseFloat(order.descuento) || 0, order.telefono);
+      }
       await prepare('DELETE FROM pedidos WHERE numero = ?').run(num);
     } else {
-      const existing = await prepare('SELECT estado_timestamps FROM pedidos WHERE numero = ?').get(num);
-      let timestamps = {};
-      if(existing) { try { timestamps = JSON.parse(existing.estado_timestamps); } catch(e){} }
-      timestamps['Cancelado'] = new Date().toISOString();
-      await prepare('UPDATE pedidos SET estado = ?, estado_timestamps = ? WHERE numero = ?').run('Cancelado', JSON.stringify(timestamps), num);
+      const order = await prepare('SELECT estado, telefono, total, descuento, estado_timestamps FROM pedidos WHERE numero = ?').get(num);
+      if (order) {
+        let timestamps = {};
+        try { timestamps = JSON.parse(order.estado_timestamps || '{}'); } catch(e){}
+        timestamps['Cancelado'] = new Date().toISOString();
+        await prepare('UPDATE pedidos SET estado = ?, estado_timestamps = ? WHERE numero = ?').run('Cancelado', JSON.stringify(timestamps), num);
+        // Restar del cliente solo si no estaba ya cancelado
+        if (order.estado !== 'Cancelado' && order.telefono) {
+          await prepare('UPDATE clientes SET total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
+            .run(parseFloat(order.total) || 0, parseFloat(order.descuento) || 0, order.telefono);
+        }
+      }
     }
     res.json({ success: true });
   } catch(err) {
