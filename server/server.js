@@ -468,8 +468,9 @@ app.put('/api/clientes/:id', verifyToken, async (req, res) => {
   const id = req.params.id;
   const { nombre, telefono, email, direccion, sector, notas, activo } = req.body;
   try {
+    const telNorm = normalizePhone(telefono);
     await prepare('UPDATE clientes SET nombre=?, telefono=?, email=?, direccion=?, sector=?, notas=?, activo=? WHERE id=?')
-      .run(nombre, telefono, email || '', direccion || '', sector || '', notas || '', activo !== undefined ? activo : 1, id);
+      .run(nombre, telNorm, email || '', direccion || '', sector || '', notas || '', activo !== undefined ? activo : 1, id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar cliente' });

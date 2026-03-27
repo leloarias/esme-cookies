@@ -2281,6 +2281,7 @@
                 + '</div>'
                 + '<div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--warm);" onclick="event.stopPropagation();">'
                 + '<button onclick="showClientHistory(' + c.id + ')" style="flex:1;padding:8px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.8rem;font-weight:600;">📋 Historial</button>'
+                + '<button onclick="editCliente(' + c.id + ')" style="padding:8px 12px;background:var(--info);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.8rem;" title="Editar">✏️</button>'
                 + (isInactive 
                   ? '<button onclick="reactivarCliente(' + c.id + ')" style="padding:8px 12px;background:var(--success);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.8rem;" title="Reactivar">✅</button>'
                   : '<button onclick="desactivarCliente(' + c.id + ')" style="padding:8px 12px;background:var(--warning);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.8rem;" title="Desactivar">👁️</button>')
@@ -2307,6 +2308,45 @@
       renderClientes(filtered);
     }
     
+    async function editCliente(id) {
+      try {
+        var res = await apiFetch(API_URL + '/api/clientes/' + id);
+        if (!res.ok) { showToast('Error al cargar cliente', 'error'); return; }
+        var c = await res.json();
+        
+        var nombre = prompt('Nombre:', c.nombre || '');
+        if (nombre === null) return;
+        var telefono = prompt('Teléfono:', c.telefono || '');
+        if (telefono === null) return;
+        var email = prompt('Email (opcional):', c.email || '');
+        if (email === null) return;
+        var direccion = prompt('Dirección (opcional):', c.direccion || '');
+        if (direccion === null) return;
+        var sector = prompt('Sector (opcional):', c.sector || '');
+        if (sector === null) return;
+
+        if (!nombre.trim() || !telefono.trim()) {
+          showToast('Nombre y teléfono son obligatorios', 'error');
+          return;
+        }
+
+        var updateRes = await apiFetch(API_URL + '/api/clientes/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: nombre.trim(), telefono: telefono.trim(), email: email.trim(), direccion: direccion.trim(), sector: sector.trim(), activo: c.activo })
+        });
+
+        if (updateRes.ok) {
+          showToast('Cliente actualizado', 'success');
+          loadClientes();
+        } else {
+          showToast('Error al actualizar', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión', 'error');
+      }
+    }
+
     async function desactivarCliente(id) {
       if (!confirm('¿Desactivar este cliente? Ocultará de la lista pero mantendrá su historial.')) return;
       try {
