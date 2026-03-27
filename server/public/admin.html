@@ -1854,32 +1854,32 @@
   </div>
 
   <!-- MODAL: EDITAR CLIENTE -->
-  <div class="modal-overlay" id="edit-cliente-modal" style="display:none; background:rgba(0,0,0,0.6);">
-    <div style="background:white; border-radius:16px; max-width:450px; width:95%; padding:24px;">
+  <div class="modal-overlay" id="edit-cliente-modal" style="display:none; background:rgba(0,0,0,0.6); justify-content:center; align-items:center;">
+    <div style="background:white; border-radius:16px; max-width:450px; width:92%; max-height:90vh; overflow-y:auto; padding:24px; margin:10px;">
       <h3 style="margin:0 0 20px; font-family:'Playfair Display',serif; color:var(--primary);">✏️ Editar Cliente</h3>
       <input type="hidden" id="edit-cliente-id">
-      <div style="display:grid; gap:15px;">
+      <div style="display:grid; gap:12px;">
         <div class="form-group">
-          <label style="font-weight:600; font-size:0.9rem;">Nombre</label>
-          <input type="text" id="edit-cliente-nombre" placeholder="Nombre completo" style="width:100%; padding:12px; border:2px solid var(--warm); border-radius:8px;">
+          <label style="font-weight:600; font-size:0.85rem;">Nombre</label>
+          <input type="text" id="edit-cliente-nombre" placeholder="Nombre completo" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px; font-size:0.9rem; box-sizing:border-box;">
         </div>
         <div class="form-group">
-          <label style="font-weight:600; font-size:0.9rem;">Teléfono</label>
-          <input type="text" id="edit-cliente-telefono" placeholder="8091234567" style="width:100%; padding:12px; border:2px solid var(--warm); border-radius:8px;">
+          <label style="font-weight:600; font-size:0.85rem;">Teléfono</label>
+          <input type="text" id="edit-cliente-telefono" placeholder="8091234567" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px; font-size:0.9rem; box-sizing:border-box;">
         </div>
         <div class="form-group">
-          <label style="font-weight:600; font-size:0.9rem;">Email (opcional)</label>
-          <input type="email" id="edit-cliente-email" placeholder="correo@ejemplo.com" style="width:100%; padding:12px; border:2px solid var(--warm); border-radius:8px;">
+          <label style="font-weight:600; font-size:0.85rem;">Email (opcional)</label>
+          <input type="email" id="edit-cliente-email" placeholder="correo@ejemplo.com" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px; font-size:0.9rem; box-sizing:border-box;">
         </div>
         <div class="form-group">
-          <label style="font-weight:600; font-size:0.9rem;">Dirección (opcional)</label>
-          <input type="text" id="edit-cliente-direccion" placeholder="Dirección" style="width:100%; padding:12px; border:2px solid var(--warm); border-radius:8px;">
+          <label style="font-weight:600; font-size:0.85rem;">Dirección (opcional)</label>
+          <input type="text" id="edit-cliente-direccion" placeholder="Dirección" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px; font-size:0.9rem; box-sizing:border-box;">
         </div>
         <div class="form-group">
-          <label style="font-weight:600; font-size:0.9rem;">Sector (opcional)</label>
-          <input type="text" id="edit-cliente-sector" placeholder="Sector" style="width:100%; padding:12px; border:2px solid var(--warm); border-radius:8px;">
+          <label style="font-weight:600; font-size:0.85rem;">Sector (opcional)</label>
+          <input type="text" id="edit-cliente-sector" placeholder="Sector" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px; font-size:0.9rem; box-sizing:border-box;">
         </div>
-        <div style="display:flex; gap:10px; margin-top:10px;">
+        <div style="display:flex; gap:10px; margin-top:8px;">
           <button onclick="saveEditCliente()" style="flex:1; padding:12px; background:var(--success); color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer;">💾 Guardar</button>
           <button onclick="document.getElementById('edit-cliente-modal').style.display='none'" style="flex:1; padding:12px; background:var(--danger); color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer;">✕ Cancelar</button>
         </div>
@@ -2301,7 +2301,16 @@
           if (c.ultimo_pedido) {
             try {
               var d = new Date(c.ultimo_pedido);
-              if (!isNaN(d.getTime())) ultimo = d.toLocaleDateString('es-DO');
+              if (!isNaN(d.getTime())) {
+                ultimo = d.toLocaleDateString('es-DO');
+              } else {
+                // Intentar formato DD/MM/YYYY
+                var parts = c.ultimo_pedido.split('/');
+                if (parts.length === 3) {
+                  var d2 = new Date(parts[2], parts[1] - 1, parts[0]);
+                  if (!isNaN(d2.getTime())) ultimo = d2.toLocaleDateString('es-DO');
+                }
+              }
             } catch(e) {}
           }
           var badgeColor = c.total_pedidos >= 5 ? 'var(--success)' : c.total_pedidos >= 2 ? 'var(--warning)' : 'var(--text-muted)';

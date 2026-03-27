@@ -543,13 +543,15 @@ async function saveClientFromOrder(cliente, telefono, direccion, sector, total, 
     const telefonoNorm = normalizePhone(telefono);
     if (!telefonoNorm) return;
     const totalNum = parseFloat(total) || 0;
+    const now = new Date();
+    const fechaStr = String(now.getDate()).padStart(2, '0') + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
     const existing = await prepare('SELECT id, nombre, activo FROM clientes WHERE telefono = ?').get(telefonoNorm);
     if (existing) {
       await prepare('UPDATE clientes SET nombre=?, direccion=?, sector=?, total_pedidos=total_pedidos+1, total_gastado=total_gastado+?, total_descuentos=total_descuentos+?, ultimo_pedido=? WHERE id=?')
-        .run(cliente, direccion || '', sector || '', totalNum, descuentoNum, new Date().toISOString(), existing.id);
+        .run(cliente, direccion || '', sector || '', totalNum, descuentoNum, fechaStr, existing.id);
     } else {
       await prepare('INSERT INTO clientes (nombre, telefono, direccion, sector, total_pedidos, total_gastado, total_descuentos, ultimo_pedido, activo) VALUES (?, ?, ?, ?, 1, ?, ?, ?, 1)')
-        .run(cliente, telefonoNorm, direccion || '', sector || '', totalNum, descuentoNum, new Date().toISOString());
+        .run(cliente, telefonoNorm, direccion || '', sector || '', totalNum, descuentoNum, fechaStr);
     }
     console.log('Client saved:', telefonoNorm);
   } catch (err) {
