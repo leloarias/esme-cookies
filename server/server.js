@@ -639,11 +639,14 @@ app.put('/api/products/:id', verifyToken, async (req, res) => {
   const { nombre, precio, descripcion, imagen } = req.body;
   const id = req.params.id;
   try {
-    await prepare(`UPDATE productos SET nombre = coalesce(?, nombre), precio = coalesce(?, precio),
-                descripcion = coalesce(?, descripcion), imagen = coalesce(?, imagen) WHERE id = ?`)
-      .run(nombre, precio, descripcion, imagen, id);
+    const current = await prepare('SELECT * FROM productos WHERE id = ?').get(id);
+    if (!current) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    await prepare('UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ? WHERE id = ?')
+      .run(nombre || current.nombre, precio || current.precio, descripcion !== undefined ? descripcion : current.descripcion, imagen !== undefined ? imagen : current.imagen, id);
     res.json({ success: true });
   } catch (err) {
+    console.error('Error actualizando producto:', err);
     res.status(500).json({ error: 'Error al actualizar producto' });
   }
 });
