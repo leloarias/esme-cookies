@@ -270,6 +270,33 @@ app.get('/api/public-config', async (req, res) => {
   }
 });
 
+// Recalcular totales de clientes desde pedidos reales
+app.post('/api/clientes/recalcular', verifyToken, async (req, res) => {
+  try {
+    const clientes = await prepare('SELECT id, telefono FROM clientes').all();
+    let actualizados = 0;
+
+    for (const c of clientes) {
+      const stats = await prepare(
+        'SELECT COUNT(*) as pedidos, COALESCE(SUM(CASE WHEN estado != ? THEN total ELSE 0 END), 0) as gastado, COALESCE(SUM(CASE WHEN estado != ? THEN descuento ELSE 0 END), 0) as descuentos FROM pedidos WHERE telefono = ?'
+      ).get('Cancelado', 'Cancelado', c.telefono);
+
+      const ultimo = await prepare(
+        'SELECT fecha FROM pedidos WHERE telefono = ? ORDER BY id DESC LIMIT 1'
+      ).get(c.telefono);
+
+      await prepare('UPDATE clientes SET total_pedidos = ?, total_gastado = ?, total_descuentos = ?, ultimo_pedido = ? WHERE id = ?')
+        .run(stats.pedidos || 0, stats.gastado || 0, stats.descuentos || 0, ultimo ? ultimo.fecha : null, c.id);
+      actualizados++;
+    }
+
+    res.json({ success: true, actualizados });
+  } catch (err) {
+    console.error('Error recalculando clientes:', err);
+    res.status(500).json({ error: 'Error al recalcular' });
+  }
+});
+
 // -----------------------------------------------------
 // Rutas de Administradores
 // -----------------------------------------------------

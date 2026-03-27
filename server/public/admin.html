@@ -1765,6 +1765,7 @@
                      style="padding:10px 14px; border:2px solid var(--warm); border-radius:10px; font-size:0.9rem; min-width:250px;"
                      oninput="searchClientes()">
               <button onclick="exportClientes()" style="padding:10px 14px; background:#27ae60; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📥 Exportar Clientes</button>
+              <button onclick="recalcularClientes()" style="padding:10px 14px; background:#3498db; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;" title="Recalcular totales desde pedidos">🔄 Recalcular</button>
               <button onclick="exportClientesHistorial()" style="padding:10px 14px; background:#8e44ad; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📊 Clientes + Pedidos</button>
               <button onclick="openNewClienteModal()" style="padding:10px 16px; background:var(--accent); color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">+ Nuevo</button>
             </div>
@@ -4787,6 +4788,23 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         showToast('Reporte mostrado', 'success');
       } catch (err) {
         showToast('Error al cargar reporte', 'error');
+      }
+    }
+
+    async function recalcularClientes() {
+      if (!confirm('Esto recalculará los totales de todos los clientes desde los pedidos reales. ¿Continuar?')) return;
+      try {
+        showToast('Recalculando...', 'info');
+        var res = await apiFetch(API_URL + '/api/clientes/recalcular', { method: 'POST' });
+        var data = await res.json();
+        if (res.ok) {
+          showToast('Clientes recalculados: ' + data.actualizados + ' actualizados', 'success');
+          loadClientes();
+        } else {
+          showToast('Error: ' + (data.error || ''), 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión', 'error');
       }
     }
 
