@@ -1125,18 +1125,26 @@ async function startServer() {
           console.error('Error verificando promos:', promoErr.message);
         }
 
-        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-        const oldOrders = await prepare(
-          "SELECT numero, cliente, telefono, created_at FROM pedidos WHERE estado IN ('Pendiente', 'Esperando Pago') AND created_at < ?"
-        ).all(twentyFourHoursAgo);
-        
-        if (oldOrders.length > 0) {
-          for (const o of oldOrders) {
-            console.log(`[Order] Cancelando pedido sin confirmar: #${o.numero}`);
-            await prepare('UPDATE pedidos SET estado = ? WHERE numero = ?').run('Cancelado', o.numero);
-            io.emit('pedido_cancelado', { numero: o.numero, cliente: o.cliente });
+        // Cancelar pedidos pendientes después de 24 horas
+        try {
+          const cutoffTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const cutoffISO = cutoffTime.toISOString();
+          const allPending = await prepare(
+            "SELECT numero, cliente, telefono, created_at FROM pedidos WHERE estado IN ('Pendiente', 'Esperando Pago')"
+          ).all();
+
+          for (const o of allPending) {
+            if (o.created_at) {
+              const createdDate = new Date(o.created_at);
+              if (!isNaN(createdDate.getTime()) && createdDate < cutoffTime) {
+                console.log(`[Order] Cancelando pedido sin confirmar: #${o.numero} (creado: ${o.created_at})`);
+                await prepare('UPDATE pedidos SET estado = ? WHERE numero = ?').run('Cancelado', o.numero);
+                io.emit('pedido_cancelado', { numero: o.numero, cliente: o.cliente });
+              }
+            }
           }
-          io.emit('orders_update');
+        } catch (orderErr) {
+          console.error('Error verificando pedidos viejos:', orderErr.message);
         }
       } catch (err) {
         console.error('Error verificando promos expiradas:', err);
