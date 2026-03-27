@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const cloudinary = require('cloudinary').v2;
 const { Server } = require('socket.io');
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
@@ -12,6 +13,13 @@ let orderCounter = 0;
 const { initDatabase, prepare, exec, saveDatabase, getDb } = require('./database');
 const { generateToken, verifyToken } = require('./auth');
 const { sendNewOrderEmail } = require('./email');
+
+// Configurar Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'daxgzly20',
+  api_key: process.env.CLOUDINARY_API_KEY || '419236225556823',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'VNwvPq4HSMOLGBW3pl1Ehszh2uk'
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -1095,21 +1103,23 @@ app.get('/api/stats', verifyToken, async (req, res) => {
 // -----------------------------------------------------
 // Carga de Imágenes (Upload)
 // -----------------------------------------------------
-app.post('/api/upload-image', verifyToken, (req, res) => {
+app.post('/api/upload-image', verifyToken, async (req, res) => {
   try {
     const { imagen, filename } = req.body;
     if (!imagen || !filename) return res.status(400).json({ error: 'Faltan datos' });
 
-    const ext = filename.split('.').pop() || 'jpg';
-    const uniqueName = `upload_${Date.now()}.${ext}`;
-    const filePath = path.join(__dirname, 'public', 'uploads', uniqueName);
-    
-    const base64Data = imagen.replace(/^data:image\/\w+;base64,/, '');
-    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+    // Subir a Cloudinary
+    const result = await cloudinary.uploader.upload(imagen, {
+      folder: 'esme-cookies',
+      public_id: `product_${Date.now()}`,
+      overwrite: true,
+      resource_type: 'image'
+    });
 
-    res.json({ success: true, url: `/uploads/${uniqueName}` });
+    res.json({ success: true, url: result.secure_url });
   } catch(err) {
-    res.status(500).json({ error: 'Error subiendo imagen' });
+    console.error('Error subiendo imagen a Cloudinary:', err.message);
+    res.status(500).json({ error: 'Error subiendo imagen: ' + err.message });
   }
 });
 
