@@ -10,14 +10,16 @@ const productos = [
   { nombre: 'Brownie de Nuez', precio: 150, descripcion: 'Húmedo e intenso, con nueces.', stock: 3 },
   { nombre: 'Galleta Red Velvet', precio: 140, descripcion: 'Terciopelo rojo con chispas blancas.', stock: 0 },
   { nombre: 'Alfajor de Maicena', precio: 90, descripcion: 'Relleno de dulce de leche.', stock: null },
-  { nombre: 'Galleta de Limón', precio: 110, descripcion: 'Cítrica y fresca.', stock: 15 },
-  { nombre: 'Caja Personalizada', precio: 0, descripcion: 'Selecciona tus galletas favoritas', stock: null, tipo: 'caja' }
+  { nombre: 'Galleta de Limón', precio: 110, descripcion: 'Cítrica y fresca.', stock: 15 }
+  // La "Caja Personalizada" NO va aquí: la crea initDatabase (id 7) para evitar duplicados.
 ];
 
 async function main() {
   await initDatabase();
 
-  const count = await prepare('SELECT COUNT(*) as c FROM productos').get();
+  // Contamos solo productos "reales" (no la Caja Personalizada que crea initDatabase),
+  // para que el seed funcione en una base nueva.
+  const count = await prepare("SELECT COUNT(*) as c FROM productos WHERE tipo IS NULL OR tipo != 'caja'").get();
   if (Number(count.c) > 0) {
     console.log('ℹ️  Ya hay productos en la base; no se insertan datos de ejemplo.');
     console.log('   (Para reiniciar el demo: borrá data/esme.db y volvé a correr esto.)');
