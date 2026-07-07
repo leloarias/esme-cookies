@@ -652,6 +652,11 @@
           </div>
         </div>
 
+        <div class="form-group">
+          <label>Email (opcional — para recibir la confirmación de tu pedido)</label>
+          <input type="email" id="email" placeholder="Ej: maria@correo.com">
+        </div>
+
         <div class="delivery-options">
           <label class="delivery-opt selected" onclick="selectDelivery(this, 'pickup')">
             <input type="radio" name="tipo-entrega" value="pickup" checked>
@@ -1172,6 +1177,7 @@
       const sector = document.getElementById('sector').value.trim();
       const pago = document.getElementById('pago').value;
       const observaciones = document.getElementById('observaciones').value.trim();
+      const email = document.getElementById('email').value.trim();
 
       if (!cliente) { showToast('Ingresa tu nombre', 'error'); return; }
       if (!telefono || telefono.replace(/\D/g, '').length < 10) {
@@ -1214,7 +1220,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            cliente, telefono, productos: productList.join(', '),
+            cliente, telefono, email, productos: productList.join(', '),
             cantidad: Object.values(cart).reduce((a, b) => a + b, 0),
             subtotal: subtotalTotal, 
             envio: ( (freeAllEnvio || (freeDelivery && deliveryType === 'delivery') || (freeEnvio && deliveryType === 'envio')) ? 0 : envio ), 

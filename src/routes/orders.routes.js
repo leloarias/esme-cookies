@@ -1,7 +1,7 @@
 const express = require('express');
 const { prepare } = require('../db');
 const { verifyToken } = require('../middleware/auth');
-const { sendNewOrderEmail } = require('../services/email');
+const { sendNewOrderEmail, sendCustomerConfirmationEmail, sendStatusChangeEmail } = require('../services/email');
 const { normalizePhone, sanitizeString, getDominicanDateTime } = require('../utils/helpers');
 const { filtrarPromocionesVigentes, evaluarPromociones } = require('../services/promotions');
 const { saveClientFromOrder, ensureClientExists } = require('../services/clients');
@@ -49,10 +49,11 @@ router.get('/api/orders/:num', verifyToken, async (req, res) => {
 });
 
 router.post('/api/orders', async (req, res) => {
-  let { cliente, telefono, productos, cantidad, precio, subtotal, envio, total, pago, tipo_entrega, observaciones, direccion, sector, nota } = req.body;
+  let { cliente, telefono, email, productos, cantidad, precio, subtotal, envio, total, pago, tipo_entrega, observaciones, direccion, sector, nota } = req.body;
 
   cliente = sanitizeString(cliente);
   telefono = sanitizeString(telefono);
+  email = sanitizeString(email);
   productos = sanitizeString(productos);
   observaciones = sanitizeString(observaciones);
   direccion = sanitizeString(direccion);
@@ -148,7 +149,9 @@ router.post('/api/orders', async (req, res) => {
     };
     getIO().emit('nuevo_pedido', orderData);
     sendNewOrderEmail(orderData);
-    await saveClientFromOrder(cliente, telefono, direccion || '', sector || '', totalConDescuento, descuentoFinal + envioDescuento);
+    await saveClientFromOrder(cliente, telefono, email, direccion || '', sector || '', totalConDescuento, descuentoFinal + envioDescuento);
+    // Email de confirmación al cliente (si dejó su email y hay SMTP configurado; si no, se omite solo).
+    sendCustomerConfirmationEmail(orderData);
 
     for (const p of promosAplicadas) {
       await prepare("UPDATE promociones SET usos_actuales = usos_actuales + 1 WHERE id = ?").run(p.id);
@@ -245,6 +248,14 @@ router.put('/api/orders/:num', verifyToken, async (req, res) => {
           .run(orderTotal, orderDescuento, telNorm);
         console.log('[PUT Order] Cancelado, restado del cliente:', telNorm);
       }
+
+      // Email al cliente notificando el nuevo estado (si tiene email y hay SMTP; si no, se omite).
+      sendStatusChangeEmail({
+        numero: num,
+        cliente: existing.cliente,
+        telefono: existing.telefono,
+        total: orderTotal
+      }, estado);
     }
 
     console.log('[PUT Order] Success:', num, 'New state:', estado);

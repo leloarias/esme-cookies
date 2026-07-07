@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { prepare } = require('../db');
+const { normalizePhone } = require('../utils/helpers');
 
 function getTransporter(config) {
   return nodemailer.createTransport({
@@ -98,7 +99,7 @@ async function sendCustomerConfirmationEmail(orderData) {
     }
 
     // Buscar email del cliente
-    const cliente = await prepare('SELECT email FROM clientes WHERE telefono = ?').get(orderData.telefono);
+    const cliente = await prepare('SELECT email FROM clientes WHERE telefono = ?').get(normalizePhone(orderData.telefono));
     if (!cliente || !cliente.email) {
       console.log('[Email] Cliente sin email registrado.');
       return { success: false, reason: 'no_email' };
@@ -182,7 +183,7 @@ async function sendStatusChangeEmail(orderData, newStatus) {
     
     if (!config.emailUser || !config.emailPass) return { success: false };
 
-    const cliente = await prepare('SELECT email FROM clientes WHERE telefono = ?').get(orderData.telefono);
+    const cliente = await prepare('SELECT email FROM clientes WHERE telefono = ?').get(normalizePhone(orderData.telefono));
     if (!cliente || !cliente.email) return { success: false };
 
     const statusMessages = {
