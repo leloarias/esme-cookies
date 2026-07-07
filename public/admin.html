@@ -1299,6 +1299,8 @@
             </div>
           </div>
           <button onclick="exportOrdersToExcel()" style="padding:10px 16px; background:#27ae60; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📊 Exportar Pedidos</button>
+          <button onclick="descargarPedidosCSV()" style="padding:10px 16px; margin-left:8px; background:#2C1810; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📄 CSV Pedidos (servidor)</button>
+          <button onclick="descargarClientesCSV()" style="padding:10px 16px; margin-left:8px; background:#2C1810; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📄 CSV Clientes (servidor)</button>
         </div>
 
         <div class="filters" style="position:relative;">
@@ -4779,18 +4781,33 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
     }
     // ===== FIN PROMOCIONES =====
 
-    async function generateReport() {
+    // Descarga un reporte CSV generado por el servidor (envía el token de admin).
+    async function descargarReporteCSV(endpoint, filename) {
       try {
         showToast('Generando reporte...', 'info');
-        var res = await apiFetch(API_URL + '/api/reporte/generate', { method: 'POST' });
-        if (res.ok) {
-          showToast('Reporte actualizado en Excel', 'success');
-        } else {
-          showToast('Error al generar reporte', 'error');
-        }
+        var res = await apiFetch(API_URL + endpoint);
+        if (!res.ok) { showToast('Error al generar reporte', 'error'); return; }
+        var blob = await res.blob();
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('Reporte descargado', 'success');
       } catch (err) {
         showToast('Error de conexion', 'error');
       }
+    }
+    function descargarPedidosCSV() {
+      var f = 'pedidos_' + new Date().toISOString().split('T')[0] + '.csv';
+      descargarReporteCSV('/api/reportes/pedidos.csv', f);
+    }
+    function descargarClientesCSV() {
+      var f = 'clientes_' + new Date().toISOString().split('T')[0] + '.csv';
+      descargarReporteCSV('/api/reportes/clientes.csv', f);
     }
 
     async function showClientesReport() {

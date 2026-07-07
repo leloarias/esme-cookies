@@ -10,10 +10,6 @@ router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', time: new Date().toISOString() });
 });
 
-router.post('/api/reporte/generate', verifyToken, (req, res) => {
-  res.json({ success: true, message: 'Reporte Excel ya no soportado, implementaremos CSV en el futuro.' });
-});
-
 router.post('/api/test-email', verifyToken, async (req, res) => {
   try {
     await sendNewOrderEmail({
