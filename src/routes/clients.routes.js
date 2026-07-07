@@ -28,8 +28,17 @@ router.get('/api/clientes', verifyToken, async (req, res) => {
 
 router.get('/api/clientes/all', verifyToken, async (req, res) => {
   try {
-    const clientes = await prepare('SELECT * FROM clientes ORDER BY total_gastado DESC').all();
-    res.json(clientes);
+    if (req.query.all === 'true') {
+      const clientes = await prepare('SELECT * FROM clientes ORDER BY total_gastado DESC').all();
+      return res.json(clientes);
+    }
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+    const totalRow = await prepare('SELECT COUNT(*) as count FROM clientes').get();
+    const total = Number(totalRow.count);
+    const clientes = await prepare('SELECT * FROM clientes ORDER BY total_gastado DESC LIMIT ? OFFSET ?').all(limit, offset);
+    res.json({ data: clientes, total, page, limit, pages: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener clientes' });
   }

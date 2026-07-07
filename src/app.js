@@ -33,6 +33,7 @@ app.use(require('./routes/admins.routes'));
 app.use(require('./routes/promotions.routes'));
 app.use(require('./routes/products.routes'));
 app.use(require('./routes/orders.routes'));
+app.use(require('./routes/inventory.routes'));
 app.use(require('./routes/stats.routes'));
 app.use(require('./routes/reports.routes'));
 app.use(require('./routes/upload.routes'));

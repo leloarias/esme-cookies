@@ -27,12 +27,12 @@ router.get('/api/promociones/all', verifyToken, async (req, res) => {
 });
 
 router.post('/api/promociones', verifyToken, async (req, res) => {
-  const { titulo, descripcion, tipo, descuento_pct, descuento_fijo, aplica_a, productos_ids, categoria, compra_minima, cantidad_minima, producto_gratis_id, activa, fecha_inicio, fecha_fin, hora_inicio, hora_fin, limite_usos, solo_clientes_nuevos, color, emoji, imagen, orden } = req.body;
+  const { titulo, descripcion, tipo, descuento_pct, descuento_fijo, aplica_a, productos_ids, categoria, compra_minima, cantidad_minima, producto_gratis_id, activa, fecha_inicio, fecha_fin, hora_inicio, hora_fin, limite_usos, solo_clientes_nuevos, solo_cajas, color, emoji, imagen, orden } = req.body;
   if (!titulo) return res.status(400).json({ error: 'El título es requerido' });
   try {
     const info = await prepare(
-      'INSERT INTO promociones (titulo, descripcion, tipo, descuento_pct, descuento_fijo, aplica_a, productos_ids, categoria, compra_minima, cantidad_minima, producto_gratis_id, activa, fecha_inicio, fecha_fin, hora_inicio, hora_fin, limite_usos, solo_clientes_nuevos, color, emoji, imagen, orden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(titulo, descripcion || '', tipo || 'banner', descuento_pct || 0, descuento_fijo || 0, aplica_a || 'todos', productos_ids || '', categoria || 'todos', compra_minima || 0, cantidad_minima || 0, producto_gratis_id || null, activa !== false ? 1 : 0, fecha_inicio || '', fecha_fin || '', hora_inicio || null, hora_fin || null, limite_usos || null, solo_clientes_nuevos ? 1 : 0, color || '#C9883A', emoji || '🎉', imagen || '', orden || 0);
+      'INSERT INTO promociones (titulo, descripcion, tipo, descuento_pct, descuento_fijo, aplica_a, productos_ids, categoria, compra_minima, cantidad_minima, producto_gratis_id, activa, fecha_inicio, fecha_fin, hora_inicio, hora_fin, limite_usos, solo_clientes_nuevos, solo_cajas, color, emoji, imagen, orden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(titulo, descripcion || '', tipo || 'banner', descuento_pct || 0, descuento_fijo || 0, aplica_a || 'todos', productos_ids || '', categoria || 'todos', compra_minima || 0, cantidad_minima || 0, producto_gratis_id || null, activa !== false ? 1 : 0, fecha_inicio || '', fecha_fin || '', hora_inicio || null, hora_fin || null, limite_usos || null, solo_clientes_nuevos ? 1 : 0, solo_cajas ? 1 : 0, color || '#C9883A', emoji || '🎉', imagen || '', orden || 0);
     res.json({ success: true, id: info.lastInsertRowid });
   } catch (err) {
     res.status(500).json({ error: 'Error al crear promoción: ' + err.message });
@@ -41,7 +41,7 @@ router.post('/api/promociones', verifyToken, async (req, res) => {
 
 router.put('/api/promociones/:id', verifyToken, async (req, res) => {
   const id = req.params.id;
-  const { titulo, descripcion, tipo, descuento_pct, descuento_fijo, aplica_a, productos_ids, categoria, compra_minima, cantidad_minima, producto_gratis_id, activa, fecha_inicio, fecha_fin, hora_inicio, hora_fin, limite_usos, solo_clientes_nuevos, color, emoji, imagen, orden } = req.body;
+  const { titulo, descripcion, tipo, descuento_pct, descuento_fijo, aplica_a, productos_ids, categoria, compra_minima, cantidad_minima, producto_gratis_id, activa, fecha_inicio, fecha_fin, hora_inicio, hora_fin, limite_usos, solo_clientes_nuevos, solo_cajas, color, emoji, imagen, orden } = req.body;
   try {
     const current = await prepare('SELECT activa FROM promociones WHERE id = ?').get(id);
     const willBeActive = activa ? 1 : 0;
@@ -51,8 +51,8 @@ router.put('/api/promociones/:id', verifyToken, async (req, res) => {
     }
 
     await prepare(
-      'UPDATE promociones SET titulo=?, descripcion=?, tipo=?, descuento_pct=?, descuento_fijo=?, aplica_a=?, productos_ids=?, categoria=?, compra_minima=?, cantidad_minima=?, producto_gratis_id=?, activa=?, fecha_inicio=?, fecha_fin=?, hora_inicio=?, hora_fin=?, limite_usos=?, solo_clientes_nuevos=?, color=?, emoji=?, imagen=?, orden=? WHERE id=?'
-    ).run(titulo, descripcion || '', tipo || 'banner', descuento_pct || 0, descuento_fijo || 0, aplica_a || 'todos', productos_ids || '', categoria || 'todos', compra_minima || 0, cantidad_minima || 0, producto_gratis_id || null, willBeActive, fecha_inicio || '', fecha_fin || '', hora_inicio || '', hora_fin || '', limite_usos || null, solo_clientes_nuevos ? 1 : 0, color || '#C9883A', emoji || '🎉', imagen || '', orden || 0, id);
+      'UPDATE promociones SET titulo=?, descripcion=?, tipo=?, descuento_pct=?, descuento_fijo=?, aplica_a=?, productos_ids=?, categoria=?, compra_minima=?, cantidad_minima=?, producto_gratis_id=?, activa=?, fecha_inicio=?, fecha_fin=?, hora_inicio=?, hora_fin=?, limite_usos=?, solo_clientes_nuevos=?, solo_cajas=?, color=?, emoji=?, imagen=?, orden=? WHERE id=?'
+    ).run(titulo, descripcion || '', tipo || 'banner', descuento_pct || 0, descuento_fijo || 0, aplica_a || 'todos', productos_ids || '', categoria || 'todos', compra_minima || 0, cantidad_minima || 0, producto_gratis_id || null, willBeActive, fecha_inicio || '', fecha_fin || '', hora_inicio || '', hora_fin || '', limite_usos || null, solo_clientes_nuevos ? 1 : 0, solo_cajas ? 1 : 0, color || '#C9883A', emoji || '🎉', imagen || '', orden || 0, id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar promoción: ' + err.message });

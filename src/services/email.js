@@ -154,6 +154,9 @@ async function sendCustomerConfirmationEmail(orderData) {
               <p style="color:#8B6914;font-weight:600;margin:0;">Por favor realiza la transferencia y envíanos el comprobante.</p>
               <p style="color:#555;margin:10px 0 0;">Una vez confirmado el pago, prepararemos tu pedido.</p>
             </div>
+            <div style="text-align:center;margin:20px 0;">
+              <a href="${(process.env.APP_URL || 'http://localhost:3001')}/seguimiento?tel=${(orderData.telefono || '').replace(/\D/g, '').slice(-10)}" style="display:inline-block;background:#2C1810;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;">📍 Seguí tu pedido</a>
+            </div>
           </div>
           <div style="background:#F5EDE4;padding:20px;text-align:center;">
             <p style="color:#8B7355;font-size:0.8rem;margin:0;">${config.shopName || 'Esme Cookies'} 🍪</p>

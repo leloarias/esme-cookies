@@ -10,7 +10,8 @@ const productos = [
   { nombre: 'Brownie de Nuez', precio: 150, descripcion: 'Húmedo e intenso, con nueces.', stock: 3 },
   { nombre: 'Galleta Red Velvet', precio: 140, descripcion: 'Terciopelo rojo con chispas blancas.', stock: 0 },
   { nombre: 'Alfajor de Maicena', precio: 90, descripcion: 'Relleno de dulce de leche.', stock: null },
-  { nombre: 'Galleta de Limón', precio: 110, descripcion: 'Cítrica y fresca.', stock: 15 }
+  { nombre: 'Galleta de Limón', precio: 110, descripcion: 'Cítrica y fresca.', stock: 15 },
+  { nombre: 'Caja Personalizada', precio: 0, descripcion: 'Selecciona tus galletas favoritas', stock: null, tipo: 'caja' }
 ];
 
 async function main() {
@@ -24,8 +25,8 @@ async function main() {
   }
 
   for (const p of productos) {
-    await prepare('INSERT INTO productos (nombre, precio, descripcion, imagen, stock) VALUES (?, ?, ?, ?, ?)')
-      .run(p.nombre, p.precio, p.descripcion, '', p.stock);
+    await prepare('INSERT INTO productos (nombre, precio, descripcion, imagen, stock, tipo, box_config) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(p.nombre, p.precio, p.descripcion, '', p.stock, p.tipo || 'producto', p.box_config || null);
   }
 
   await prepare('INSERT INTO promociones (titulo, descripcion, tipo, descuento_pct, activa, emoji, color) VALUES (?, ?, ?, ?, 1, ?, ?)')

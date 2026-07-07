@@ -565,7 +565,19 @@
       max-width: 400px;
     }
 
-    .closed-icon { font-size: 5rem; margin-bottom: 15px; }
+    .closed-icon {
+      font-size: 5rem;
+      margin-bottom: 15px;
+      display: inline-block;
+      animation: cookieBounce 2s ease-in-out infinite;
+    }
+
+    @keyframes cookieBounce {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-15px) rotate(-8deg); }
+      50% { transform: translateY(0) rotate(0deg); }
+      75% { transform: translateY(-8px) rotate(5deg); }
+    }
     .closed-box h1 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 12px; }
     .closed-box p { font-size: 1rem; opacity: 0.9; margin-bottom: 20px; }
 
@@ -584,6 +596,225 @@
       color: var(--accent-light);
       text-decoration: none;
       font-weight: 600;
+    }
+
+    /* Box builder modal */
+    #box-builder-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 20000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #box-builder-overlay.show { display: flex; }
+
+    .box-builder-modal {
+      background: white;
+      border-radius: 20px;
+      width: 100%;
+      max-width: 700px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: modalSlide 0.3s ease;
+    }
+    @keyframes modalSlide {
+      from { opacity: 0; transform: translateY(30px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .box-builder-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      border-radius: 20px 20px 0 0;
+    }
+    .box-builder-header h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.2rem;
+      color: white !important;
+    }
+    .box-builder-header button {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 1.8rem;
+      cursor: pointer;
+      opacity: 0.8;
+      line-height: 1;
+    }
+    .box-builder-header button:hover { opacity: 1; }
+
+    .box-builder-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .box-size-selector label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 10px;
+      color: var(--primary);
+    }
+    .size-options {
+      display: flex;
+      gap: 10px;
+    }
+    .size-btn {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid var(--warm);
+      border-radius: 12px;
+      background: var(--cream);
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: var(--primary);
+    }
+    .size-btn:hover { border-color: var(--accent-light); }
+    .size-btn.active {
+      border-color: var(--accent);
+      background: rgba(201, 136, 58, 0.12);
+      color: var(--accent);
+    }
+
+    .box-progress {
+      margin: 16px 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: #6B5B4F;
+    }
+    .box-progress-bar {
+      height: 6px;
+      background: var(--warm);
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .box-progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, var(--accent), var(--accent-light));
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .box-products {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .box-product-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--cream);
+      border-radius: 12px;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .box-product-row.filled { border-color: rgba(201, 136, 58, 0.3); }
+    .box-product-row .bp-icon { font-size: 1.8rem; }
+    .box-product-row .bp-info { flex: 1; }
+    .box-product-row .bp-name { font-weight: 600; font-size: 0.9rem; color: var(--primary); }
+    .box-product-row .bp-price { font-size: 0.8rem; color: var(--accent); font-weight: 700; }
+    .box-product-row .bp-qty {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .box-product-row .bp-qty button {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .box-product-row .bp-qty button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .box-product-row .bp-qty button:hover:not(:disabled) { transform: scale(1.1); }
+    .box-product-row .bp-qty span {
+      min-width: 28px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--primary);
+    }
+
+    .box-total {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      border-top: 2px solid var(--warm);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .box-total span:last-child { color: var(--accent); font-size: 1.3rem; }
+
+    .box-builder-footer {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px 20px;
+      border-top: 1px solid var(--warm);
+    }
+    .box-btn-cancel {
+      flex: 1;
+      padding: 14px;
+      border: 2px solid var(--warm);
+      border-radius: 14px;
+      background: white;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--primary);
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+    }
+    .box-btn-cancel:hover { border-color: #ccc; }
+    .box-btn-add {
+      flex: 2;
+      padding: 14px;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-light));
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(201, 136, 58, 0.3);
+    }
+    .box-btn-add:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(201, 136, 58, 0.4); }
+    .box-btn-add:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .bp-qty .bp-qty-val {
+      min-width: 28px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--primary);
     }
 
     .loading { text-align: center; padding: 40px; color: #6B5B4F; }
@@ -611,6 +842,7 @@
       <span class="status-dot"></span>
       <span id="status-text">Abierto</span>
     </div>
+    <a href="/seguimiento" class="track-header-link" style="display:inline-block; margin-top:14px; color:#fff; background:rgba(255,255,255,0.18); padding:9px 20px; border-radius:20px; text-decoration:none; font-weight:600; font-size:0.9rem; backdrop-filter:blur(4px);">📍 Seguí tu pedido</a>
   </header>
 
   <!-- Shop Closed Overlay -->
@@ -618,7 +850,7 @@
     <div class="closed-box">
       <div class="closed-icon">🍪</div>
       <h1 id="closed-name">Esme Cookies</h1>
-      <p>Estamos horneando nuevas deliciosas ideas.<br>Estaremos de vuelta muy pronto.</p>
+      <p>Estamos horneando nuevas y deliciosas ideas.<br>Estaremos de vuelta muy pronto.</p>
       <div class="closed-badge">TIENDA CERRADA</div>
       <a id="closed-whatsapp" href="#" target="_blank" class="closed-whatsapp">
         📱 Contactar por WhatsApp
@@ -740,6 +972,44 @@
     </div>
   </div>
 
+  <!-- Custom Box Builder Modal -->
+  <div id="box-builder-overlay">
+    <div class="box-builder-modal">
+      <div class="box-builder-header">
+        <h2>🎁 Arma tu Caja Personalizada</h2>
+        <button onclick="closeBoxBuilder()">&times;</button>
+      </div>
+      <div class="box-builder-body">
+        <div class="box-size-selector">
+          <label>¿Cuántas galletas quieres incluir?</label>
+          <div class="size-options">
+            <button class="size-btn" onclick="selectBoxSize(6)">6 galletas</button>
+            <button class="size-btn" onclick="selectBoxSize(12)">12 galletas</button>
+            <button class="size-btn" onclick="selectBoxSize(24)">24 galletas</button>
+          </div>
+        </div>
+
+        <div class="box-progress">
+          <span id="box-progress-text">Selecciona un tamaño para empezar</span>
+          <div class="box-progress-bar">
+            <div class="box-progress-fill" id="box-progress-fill"></div>
+          </div>
+        </div>
+
+        <div id="box-products" class="box-products"></div>
+
+        <div class="box-total">
+          <span>Total de la caja:</span>
+          <span id="box-total-price">RD$ 0</span>
+        </div>
+      </div>
+      <div class="box-builder-footer">
+        <button class="box-btn-cancel" onclick="closeBoxBuilder()">Cancelar</button>
+        <button class="box-btn-add" id="box-btn-add" onclick="addCustomBoxToCart()" disabled>Agregar Caja al Pedido</button>
+      </div>
+    </div>
+  </div>
+
   <button class="cart-float" id="cart-float" onclick="document.querySelector('.form-section').scrollIntoView({behavior:'smooth'})">
     🛒 <span class="cart-count" id="cart-count">0</span>
   </button>
@@ -754,6 +1024,9 @@
     let deliveryType = 'pickup';
     let config = { delivery: 50, envio: 100, isOpen: 1, shopPhone: '8097851241', shopName: 'Esme Cookies' };
     let activePromos = [];
+    let customBox = null;
+    let boxSize = 0;
+    let boxContents = {};
 
     // WebSocket
     const socket = io();
@@ -858,7 +1131,9 @@
           msgTemplates.msgPreparando = cfg.msgPreparando || '';
           msgTemplates.msgListo = cfg.msgListo || '';
           msgTemplates.msgEntregado = cfg.msgEntregado || '';
-          
+
+          showBoxButton();
+
           document.getElementById('shop-name').textContent = config.shopName;
           document.getElementById('closed-name').textContent = config.shopName;
           document.getElementById('delivery-price-label').textContent = 'RD$' + config.delivery;
@@ -873,6 +1148,7 @@
     async function loadProducts() {
       try {
         const res = await fetch(API + '/api/products');
+        if (!res.ok) { document.getElementById('products-grid').innerHTML = '<p class="loading">Error al cargar productos</p>'; return; }
         products = await res.json();
         renderProducts();
       } catch (err) {
@@ -883,6 +1159,7 @@
     async function loadOffers() {
       try {
         const res = await fetch(API + '/api/promociones');
+        if (!res.ok) return;
         const promos = await res.json();
         activePromos = promos;
         renderOffers(promos);
@@ -911,6 +1188,8 @@
         
         if (promo.compra_minima > 0 && subtotal < promo.compra_minima) return;
         if (promo.cantidad_minima > 0 && totalItems < promo.cantidad_minima) return;
+
+        if (promo.solo_cajas && !customBox) return;
 
         switch(promo.tipo) {
           case 'descuento_pct':
@@ -1058,11 +1337,25 @@
 
     function renderProducts() {
       const grid = document.getElementById('products-grid');
-      if (!products.length) {
+      const filtered = products.filter(p => p.tipo !== 'caja');
+      var boxProd = products.find(function(p) { return p.tipo === 'caja'; });
+      if (!filtered.length && !boxProd) {
         grid.innerHTML = '<p class="loading">No hay productos disponibles</p>';
         return;
       }
-      grid.innerHTML = products.map(p => {
+      showBoxButton();
+      var html = '';
+      if (boxProd) {
+        html += '<div class="product-card box-card" onclick="openBoxBuilder()" style="cursor:pointer;border:2px solid var(--accent);background:linear-gradient(135deg,#fff8f0,#fff);">'
+          + '<div class="product-img" style="background:linear-gradient(135deg,var(--accent-light),var(--accent));font-size:4rem;">🎁</div>'
+          + '<div class="product-info">'
+          + '<h3 class="product-name" style="color:var(--accent);">' + boxProd.nombre + '</h3>'
+          + '<p class="product-desc">' + (boxProd.descripcion || 'Selecciona tus galletas favoritas') + '</p>'
+          + '<div style="margin-top:10px;padding:10px 20px;background:linear-gradient(135deg,var(--accent),var(--accent-light));color:white;border-radius:50px;font-weight:700;font-size:0.9rem;display:inline-block;">🎨 Personalizar</div>'
+          + '</div>'
+          + '</div>';
+      }
+      html += filtered.map(p => {
         const qty = cart[p.id] || 0;
         const imgSrc = p.imagen && p.imagen.startsWith('http') ? p.imagen : (p.imagen ? API + p.imagen : '');
         const hasImage = imgSrc && imgSrc.length > 0;
@@ -1098,6 +1391,132 @@
           </div>
         `;
       }).join('');
+      grid.innerHTML = html;
+    }
+
+    /* === Custom Box Builder === */
+    function openBoxBuilder() {
+      var bc = getBoxConfig();
+      if (!bc) { showToast('No hay cajas disponibles', 'error'); return; }
+      boxSize = 0;
+      boxContents = {};
+      customBox = null;
+      var sizeContainer = document.querySelector('.size-options');
+      sizeContainer.innerHTML = (bc.sizes || [6]).map(function(s) {
+        return '<button class="size-btn" data-size="' + s + '" onclick="selectBoxSize(' + s + ')">' + s + ' galletas</button>';
+      }).join('');
+      document.getElementById('box-builder-overlay').classList.add('show');
+      renderBoxProducts();
+      updateBoxUI();
+    }
+
+    function closeBoxBuilder() {
+      document.getElementById('box-builder-overlay').classList.remove('show');
+      boxSize = 0;
+      boxContents = {};
+    }
+
+    function selectBoxSize(size) {
+      boxSize = size;
+      document.querySelectorAll('.size-btn').forEach(b => {
+        b.classList.toggle('active', parseInt(b.getAttribute('data-size')) === size);
+      });
+      boxContents = {};
+      renderBoxProducts();
+      updateBoxUI();
+    }
+
+    function renderBoxProducts() {
+      const container = document.getElementById('box-products');
+      var bc = getBoxConfig();
+      var allowed = (bc && bc.allowedProducts) || [];
+      var items;
+      if (allowed.length > 0) {
+        items = products.filter(function(p) { return allowed.indexOf(p.id) >= 0; });
+      } else {
+        items = products.filter(function(p) { return p.tipo !== 'caja'; });
+      }
+      container.innerHTML = items.map(p => {
+        const qty = boxContents[p.id] || 0;
+        const imgSrc = p.imagen && p.imagen.startsWith('http') ? p.imagen : (p.imagen ? API + p.imagen : '');
+        const icon = imgSrc ? `<img src="${imgSrc}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;" onerror="this.outerHTML='<span class=\\'bp-icon\\'>🍪</span>'">` : '<span class="bp-icon">🍪</span>';
+        return `
+          <div class="box-product-row${qty > 0 ? ' filled' : ''}" id="bpr-${p.id}">
+            ${icon}
+            <div class="bp-info">
+              <div class="bp-name">${p.nombre}</div>
+              <div class="bp-price">RD$ ${p.precio.toLocaleString()} c/u</div>
+            </div>
+            <div class="bp-qty">
+              <button onclick="boxChangeQty(${p.id}, -1)" ${qty <= 0 ? 'disabled' : ''}>−</button>
+              <span class="bp-qty-val" id="bqty-${p.id}">${qty}</span>
+              <button onclick="boxChangeQty(${p.id}, 1)" ${qty >= (boxSize - getBoxFilledCount() + qty) ? 'disabled' : ''}>+</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function getBoxFilledCount() {
+      return Object.values(boxContents).reduce((a, b) => a + b, 0);
+    }
+
+    function boxChangeQty(id, delta) {
+      if (boxSize <= 0) { showToast('Primero selecciona un tamaño de caja', 'error'); return; }
+      const current = boxContents[id] || 0;
+      let newQty = Math.max(0, current + delta);
+      const filled = getBoxFilledCount();
+      if (delta > 0 && filled >= boxSize) {
+        showToast('Ya has completado la caja', 'error');
+        return;
+      }
+      const p = products.find(x => x.id == id);
+      if (p && p.stock !== null && newQty > p.stock) {
+        newQty = p.stock;
+        if (delta > 0) showToast('Solo quedan ' + p.stock + ' de ' + p.nombre, 'error');
+      }
+      if (newQty === 0) delete boxContents[id];
+      else boxContents[id] = newQty;
+      renderBoxProducts();
+      updateBoxUI();
+    }
+
+    function updateBoxUI() {
+      const filled = getBoxFilledCount();
+      const total = Object.entries(boxContents).reduce((sum, [id, qty]) => {
+        const p = products.find(x => x.id == id);
+        return sum + (p ? p.precio * qty : 0);
+      }, 0);
+      const restantes = boxSize - filled;
+      document.getElementById('box-progress-text').textContent =
+        boxSize > 0
+          ? (filled >= boxSize ? '¡Caja completa! Ya puedes agregarla al pedido' : `Has seleccionado ${filled} de ${boxSize} galletas (faltan ${restantes})`)
+          : 'Selecciona un tamaño para empezar';
+      document.getElementById('box-progress-fill').style.width =
+        boxSize > 0 ? Math.min(100, (filled / boxSize) * 100) + '%' : '0%';
+      document.getElementById('box-total-price').textContent = 'RD$ ' + total.toLocaleString();
+      document.getElementById('box-btn-add').disabled = filled === 0 || filled < boxSize;
+    }
+
+    function addCustomBoxToCart() {
+      const filled = getBoxFilledCount();
+      if (filled === 0) { showToast('Selecciona al menos una galleta', 'error'); return; }
+      if (filled < boxSize) { showToast('La caja debe estar completa (' + filled + ' de ' + boxSize + ' galletas)', 'error'); return; }
+      if (customBox) {
+        // Remove previous box items from cart
+        for (const id of Object.keys(customBox.contents)) {
+          cart[id] = (cart[id] || 0) - customBox.contents[id];
+          if (cart[id] <= 0) delete cart[id];
+        }
+      }
+      // Add new box items to cart
+      for (const [id, qty] of Object.entries(boxContents)) {
+        cart[id] = (cart[id] || 0) + qty;
+      }
+      customBox = { size: boxSize, contents: { ...boxContents }, total: Object.entries(boxContents).reduce((sum, [id, qty]) => { const p = products.find(x => x.id == id); return sum + (p ? p.precio * qty : 0); }, 0) };
+      closeBoxBuilder();
+      renderProducts();
+      updateCart();
+      showToast('🎁 ¡Caja personalizada agregada!', 'success');
     }
 
     function changeQty(id, delta) {
@@ -1128,13 +1547,48 @@
       const itemsDiv = document.getElementById('summary-items');
       let subtotal = 0;
       let html = '';
-      
-      for (const [id, qty] of Object.entries(cart)) {
-        const p = products.find(x => x.id == id);
-        if (p && qty > 0) {
-          const itemTotal = p.precio * qty;
-          subtotal += itemTotal;
-          html += `<div class="summary-item"><span>${p.nombre} x${qty}</span><span>RD$ ${itemTotal.toLocaleString()}</span></div>`;
+
+      if (customBox && Object.keys(customBox.contents).length > 0) {
+        const boxFilled = Object.values(customBox.contents).reduce((a, b) => a + b, 0);
+        html += `<div class="summary-item" style="color:var(--accent-light);font-weight:700;border:none;padding-bottom:4px;">
+          <span>🎁 Caja Personalizada (${boxFilled} galletas)</span>
+          <span></span>
+        </div>`;
+
+        let hasExtra = false;
+        for (const [id, qty] of Object.entries(cart)) {
+          const p = products.find(x => x.id == id);
+          if (p && qty > 0) {
+            if (id in (customBox.contents || {})) {
+              const itemTotal = p.precio * qty;
+              subtotal += itemTotal;
+              html += `<div class="summary-item" style="padding-left:20px;font-size:0.85rem;">
+                <span>• ${p.nombre} x${qty}</span>
+                <span>RD$ ${itemTotal.toLocaleString()}</span>
+              </div>`;
+            } else {
+              hasExtra = true;
+            }
+          }
+        }
+        // Items outside the box
+        if (hasExtra) html += `<div class="summary-item" style="border:none;padding:4px 0;font-size:0.8rem;opacity:0.7;"><span>— Otros productos —</span></div>`;
+        for (const [id, qty] of Object.entries(cart)) {
+          const p = products.find(x => x.id == id);
+          if (p && qty > 0 && !(id in (customBox.contents || {}))) {
+            const itemTotal = p.precio * qty;
+            subtotal += itemTotal;
+            html += `<div class="summary-item"><span>${p.nombre} x${qty}</span><span>RD$ ${itemTotal.toLocaleString()}</span></div>`;
+          }
+        }
+      } else {
+        for (const [id, qty] of Object.entries(cart)) {
+          const p = products.find(x => x.id == id);
+          if (p && qty > 0) {
+            const itemTotal = p.precio * qty;
+            subtotal += itemTotal;
+            html += `<div class="summary-item"><span>${p.nombre} x${qty}</span><span>RD$ ${itemTotal.toLocaleString()}</span></div>`;
+          }
         }
       }
       
@@ -1205,11 +1659,34 @@
 
       const productList = [];
       let subtotal = 0;
-      for (const [id, qty] of Object.entries(cart)) {
-        const p = products.find(x => x.id == id);
-        if (p && qty > 0) {
-          productList.push(`${p.nombre} x${qty}`);
-          subtotal += p.precio * qty;
+      if (customBox && Object.keys(customBox.contents).length > 0) {
+        const boxFilled = Object.values(customBox.contents).reduce((a, b) => a + b, 0);
+        const boxItems = [];
+        for (const [id, qty] of Object.entries(customBox.contents)) {
+          const p = products.find(x => x.id == id);
+          if (p && qty > 0) {
+            boxItems.push(`${p.nombre} x${qty}`);
+            subtotal += p.precio * qty;
+          }
+        }
+        productList.push(`🎁 Caja Personalizada (${boxFilled}): ${boxItems.join(', ')}`);
+        // Add non-box items
+        for (const [id, qty] of Object.entries(cart)) {
+          if (!(id in customBox.contents)) {
+            const p = products.find(x => x.id == id);
+            if (p && qty > 0) {
+              productList.push(`${p.nombre} x${qty}`);
+              subtotal += p.precio * qty;
+            }
+          }
+        }
+      } else {
+        for (const [id, qty] of Object.entries(cart)) {
+          const p = products.find(x => x.id == id);
+          if (p && qty > 0) {
+            productList.push(`${p.nombre} x${qty}`);
+            subtotal += p.precio * qty;
+          }
         }
       }
       if (!productList.length) { showToast('Selecciona productos', 'error'); return; }
@@ -1225,6 +1702,13 @@
 
       try {
         const cartItems = [];
+        if (customBox && Object.keys(customBox.contents).length > 0) {
+          const boxFilled = Object.values(customBox.contents).reduce((a, b) => a + b, 0);
+          const boxP = products.find(x => x.id == 7);
+          if (boxP) {
+            cartItems.push({ id: 7, nombre: 'Caja Personalizada (' + boxFilled + ')', precio: 0, qty: 1 });
+          }
+        }
         for (const [id, qty] of Object.entries(cart)) {
           const p = products.find(x => x.id == id);
            if (p && qty > 0) {
@@ -1333,6 +1817,9 @@
 
     function newOrder() {
       cart = {};
+      customBox = null;
+      boxSize = 0;
+      boxContents = {};
       document.getElementById('cliente').value = '';
       document.getElementById('telefono').value = '';
       document.getElementById('email').value = '';
@@ -1342,6 +1829,7 @@
       document.getElementById('order-form').style.display = 'block';
       document.getElementById('success-screen').classList.remove('show');
       renderProducts();
+      showBoxButton();
       updateCart();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1357,6 +1845,25 @@
     loadConfig();
     loadProducts();
     loadOffers();
+
+    function getBoxProduct() {
+      return products.find(function(p) { return p.tipo === 'caja'; }) || null;
+    }
+
+    function getBoxConfig() {
+      var bp = getBoxProduct();
+      if (!bp) return null;
+      var bc = bp.box_config;
+      if (bc && typeof bc === 'string') { try { bc = JSON.parse(bc); } catch(e) { bc = null; } }
+      if (!bc) bc = { sizes: [6, 12, 24], allowedProducts: [] };
+      if (!Array.isArray(bc.sizes)) bc.sizes = [6, 12, 24];
+      if (!Array.isArray(bc.allowedProducts)) bc.allowedProducts = [];
+      return bc;
+    }
+
+    function showBoxButton() {
+      // box toggle button removed, only box card in grid remains
+    }
   </script>
 </body>
 </html>

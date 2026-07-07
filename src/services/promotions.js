@@ -43,6 +43,15 @@ function evaluarPromociones(promosActivas, ctx) {
       return;
     }
 
+    // Solo cajas: solo aplicar si el carrito tiene un item de tipo caja (id == 7)
+    if (promo.solo_cajas) {
+      const hasBox = cartItemsArr.some(item => Number(item.id) === 7);
+      if (!hasBox) {
+        console.log(`[Order Debug] Promo ${promo.titulo} rechazada: solo_cajas activo pero el carrito no tiene caja`);
+        return;
+      }
+    }
+
     switch (promo.tipo) {
       case 'descuento_pct':
         ahorro = Math.round(subTotalNum * (promo.descuento_pct / 100));

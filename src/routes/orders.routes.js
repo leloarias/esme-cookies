@@ -13,11 +13,26 @@ const router = express.Router();
 
 router.get('/api/orders', verifyToken, async (req, res) => {
   try {
-    const orders = await prepare('SELECT * FROM pedidos ORDER BY id DESC').all();
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    const totalRow = await prepare('SELECT COUNT(*) as count FROM pedidos').get();
+    const total = Number(totalRow.count);
+
+    if (req.query.all === 'true') {
+      const orders = await prepare('SELECT * FROM pedidos ORDER BY id DESC').all();
+      orders.forEach(o => {
+        try { o.estado_timestamps = JSON.parse(o.estado_timestamps); } catch (e) { o.estado_timestamps = {}; }
+      });
+      return res.json(orders);
+    }
+
+    const orders = await prepare('SELECT * FROM pedidos ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset);
     orders.forEach(o => {
       try { o.estado_timestamps = JSON.parse(o.estado_timestamps); } catch (e) { o.estado_timestamps = {}; }
     });
-    res.json(orders);
+    res.json({ data: orders, total, page, limit, pages: Math.ceil(total / limit) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener pedidos' });
@@ -165,7 +180,7 @@ router.post('/api/orders', async (req, res) => {
     }
 
     // Descontar inventario de los productos con control de stock.
-    await decrementStock(cartItemsArr);
+    await decrementStock(cartItemsArr, newNum);
 
     res.json({
       success: true,

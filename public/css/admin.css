@@ -657,6 +657,12 @@
       overflow-y: auto;
     }
 
+    .modal-lg { max-width: 800px; }
+
+    .modal-wide {
+      max-width: 720px;
+    }
+
     .modal-header {
       background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
       padding: 20px 24px;
@@ -666,8 +672,9 @@
 
     .modal-header h2 {
       font-family: 'Playfair Display', serif;
-      color: var(--accent-light);
+      color: #fff;
       font-size: 1.3rem;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
 
     .modal-close {

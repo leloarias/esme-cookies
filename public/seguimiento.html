@@ -192,6 +192,7 @@
       btn.disabled = true; btn.textContent = 'Buscando...';
       try {
         var res = await fetch('/api/seguimiento/' + tel);
+        if (!res.ok) { cont.innerHTML = '<div class="msg">Error al buscar. Intentá de nuevo.</div>'; btn.disabled = false; btn.textContent = 'Buscar'; return; }
         var data = await res.json();
         if (!Array.isArray(data) || data.length === 0) {
           cont.innerHTML = '<div class="msg">No encontramos pedidos con ese número.<br>Revisá que sea el mismo que usaste al ordenar.</div>';

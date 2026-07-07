@@ -169,7 +169,7 @@
     
     async function loadDataSilently() {
       try {
-        var res = await apiFetch(API_URL + '/api/orders');
+        var res = await apiFetch(API_URL + '/api/orders?all=true');
         if (res.ok) orders = await res.json();
         var pres = await apiFetch(API_URL + '/api/products');
         if (pres.ok) products = await pres.json();
@@ -269,7 +269,7 @@
     
     async function loadClientes() {
       try {
-        var res = await apiFetch(API_URL + '/api/clientes/all');
+        var res = await apiFetch(API_URL + '/api/clientes/all?all=true');
         if (res.ok) {
           clientesCache = await res.json();
           renderClientes(clientesCache);
@@ -280,6 +280,9 @@
       }
     }
     
+    var clientesPage = 1;
+    var clientesPerPage = 50;
+
     function renderClientes(clientes) {
       try {
         // Actualizar contadores
@@ -307,9 +310,15 @@
           document.getElementById('clientes-list').innerHTML = '<p style="color:var(--text-muted);text-align:center;grid-column:1/-1;">No hay clientes registrados.</p>';
           return;
         }
+
+        var totalPages = Math.ceil(clientes.length / clientesPerPage);
+        if (clientesPage > totalPages) clientesPage = totalPages;
+        if (clientesPage < 1) clientesPage = 1;
+        var start = (clientesPage - 1) * clientesPerPage;
+        var pageClientes = clientes.slice(start, start + clientesPerPage);
         
         var html = '';
-        clientes.forEach(function(c) {
+        pageClientes.forEach(function(c) {
           var ultimo = 'N/A';
           if (c.ultimo_pedido) {
             try {
@@ -351,6 +360,17 @@
                 + '</div>'
                 + '</div>';
         });
+
+        if (totalPages > 1) {
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:0.85rem;grid-column:1/-1;">';
+          html += '<span style="color:var(--text-muted)">Mostrando ' + (start + 1) + '-' + Math.min(start + clientesPerPage, clientes.length) + ' de ' + clientes.length + ' clientes</span>';
+          html += '<div style="display:flex;gap:8px;align-items:center;">';
+          html += '<button onclick="clientesPage=' + Math.max(1, clientesPage - 1) + ';renderClientes(clientesCache);" style="padding:6px 14px;background:var(--warm);border:none;border-radius:6px;cursor:pointer;font-weight:600;' + (clientesPage <= 1 ? 'opacity:0.4;pointer-events:none;' : '') + '">◀ Anterior</button>';
+          html += '<span style="font-weight:600;color:var(--primary);">Pág ' + clientesPage + ' de ' + totalPages + '</span>';
+          html += '<button onclick="clientesPage=' + Math.min(totalPages, clientesPage + 1) + ';renderClientes(clientesCache);" style="padding:6px 14px;background:var(--warm);border:none;border-radius:6px;cursor:pointer;font-weight:600;' + (clientesPage >= totalPages ? 'opacity:0.4;pointer-events:none;' : '') + '">Siguiente ▶</button>';
+          html += '</div></div>';
+        }
+
         document.getElementById('clientes-list').innerHTML = html;
       } catch(err) { 
         console.error('Error rendering clientes:', err); 
@@ -358,6 +378,7 @@
     }
     
     async function searchClientes() {
+      clientesPage = 1;
       var query = document.getElementById('cliente-search').value.trim().toLowerCase();
       if (!query) {
         renderClientes(clientesCache);
@@ -471,10 +492,12 @@
           document.getElementById('historial-cliente-nombre').textContent = nombre;
           document.getElementById('historial-cliente-info').textContent = '📱 ' + telefono + ' | 📧 ' + email;
           
-          var pedidosRes = await fetch(API_URL + '/api/orders/cliente/' + telefono);
+          var pedidosRes = await apiFetch(API_URL + '/api/orders/cliente/' + telefono);
           var pedidos = [];
           if (pedidosRes.ok) {
             pedidos = await pedidosRes.json();
+          } else {
+            showToast('Error al cargar historial del cliente', 'error');
           }
           
           if (!pedidos || pedidos.length === 0) {
@@ -871,6 +894,75 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       }
     }
 
+    async function loadBoxConfig() {
+      try {
+        var res = await apiFetch(API_URL + '/api/config');
+        if (!res.ok) return;
+        var cfg = await res.json();
+        var boxCfg = cfg.customBoxConfig || { enabled: true, sizes: [6, 12, 24], excludedProducts: [] };
+
+        document.getElementById('cfg-box-enabled').checked = boxCfg.enabled !== false;
+
+        document.querySelectorAll('.box-size-cb').forEach(function(cb) {
+          cb.checked = (boxCfg.sizes || []).indexOf(parseInt(cb.value)) >= 0;
+        });
+
+        // Load products for exclusion list
+        var pres = await apiFetch(API_URL + '/api/products');
+        if (pres.ok) {
+          var prods = await pres.json();
+          var container = document.getElementById('box-excluded-products');
+          container.innerHTML = '';
+          var filtered = prods.filter(function(p) { return p.id != 7; });
+          if (filtered.length === 0) {
+            container.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">No hay productos disponibles</p>';
+          } else {
+            filtered.forEach(function(p) {
+              var excluded = (boxCfg.excludedProducts || []).indexOf(p.id) >= 0;
+              var label = document.createElement('label');
+              label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 10px;border-radius:8px;background:' + (excluded ? '#fee' : 'white') + ';border:1px solid ' + (excluded ? '#ecc' : 'var(--warm)') + ';';
+              label.innerHTML = '<input type="checkbox" class="box-excl-cb" value="' + p.id + '" ' + (excluded ? 'checked' : '') + ' onchange="saveBoxConfig()"> <span style="flex:1;">' + p.nombre + '</span> <span style="color:var(--text-muted);font-size:0.8rem;">RD$' + p.precio + '</span>';
+              container.appendChild(label);
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Error loading box config:', e);
+      }
+    }
+
+    async function saveBoxConfig() {
+      var enabled = document.getElementById('cfg-box-enabled').checked;
+      var sizes = [];
+      document.querySelectorAll('.box-size-cb:checked').forEach(function(cb) { sizes.push(parseInt(cb.value)); });
+      var excludedProducts = [];
+      document.querySelectorAll('.box-excl-cb:checked').forEach(function(cb) { excludedProducts.push(parseInt(cb.value)); });
+
+      var data = {
+        customBoxConfig: {
+          enabled: enabled,
+          sizes: sizes.length > 0 ? sizes : [6],
+          excludedProducts: excludedProducts
+        }
+      };
+
+      try {
+        var res = await apiFetch(API_URL + '/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (res.ok) {
+          showToast('Configuración de cajas guardada ✅', 'success');
+          loadBoxConfig();
+        } else {
+          showToast('Error al guardar', 'error');
+        }
+      } catch (e) {
+        showToast('Error de conexión', 'error');
+      }
+    }
+
     async function loadAdmins() {
       try {
         var res = await apiFetch(API_URL + '/api/administradores');
@@ -944,7 +1036,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var newPass = document.getElementById('pass-' + id).value;
       if (!newPass || newPass.length < 6) { showToast('La contraseña debe tener al menos 6 caracteres', 'error'); return; }
       
-      fetch(API_URL + '/api/administradores/' + id, {
+      apiFetch(API_URL + '/api/administradores/' + id, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({password: newPass})
@@ -1033,13 +1125,22 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         var btn = document.querySelector('button[onclick="loadData()"]');
         if (btn) btn.textContent = '...';
 
-        var res = await apiFetch(API_URL + '/api/orders');
+        var res = await apiFetch(API_URL + '/api/orders?all=true');
         if (!res.ok) throw new Error('Error en respuesta');
         orders = await res.json();
 
         var pres = await apiFetch(API_URL + '/api/products');
         if (!pres.ok) throw new Error('Error en productos');
         products = await pres.json();
+
+        // Cargar umbral de inventario para el dashboard
+        try {
+          var invCfg = await apiFetch(API_URL + '/api/inventory/alerts');
+          if (invCfg.ok) {
+            var invCfgData = await invCfg.json();
+            window._invThreshold = invCfgData.umbralMinimo || 5;
+          }
+        } catch(e) {}
 
         await loadConfig();
         populateDateFilters();
@@ -1475,33 +1576,8 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       }
       if (document.getElementById('promos-usage-list')) document.getElementById('promos-usage-list').innerHTML = promosHtml;
 
-      // Alertas de inventario (usa el stock actual de los productos, no el filtro de fecha)
-      var invEl = document.getElementById('inventory-alerts');
-      if (invEl) {
-        var conStock = products.filter(function (p) { return p.stock !== null && p.stock !== undefined; });
-        var agotados = conStock.filter(function (p) { return p.stock <= 0; });
-        var bajos = conStock.filter(function (p) { return p.stock > 0 && p.stock <= 5; });
-        var invHtml = '';
-        if (conStock.length === 0) {
-          invHtml = '<p style="color:var(--text-muted);">Ningún producto tiene control de stock. Asigná un stock a un producto en la pestaña Productos para verlo acá.</p>';
-        } else {
-          invHtml += '<div style="display:flex; gap:10px; margin-bottom:14px;">';
-          invHtml += '<div style="flex:1; text-align:center; background:#fdecea; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:#c0392b;">' + agotados.length + '</div><div style="font-size:0.8rem; color:#c0392b;">Agotados</div></div>';
-          invHtml += '<div style="flex:1; text-align:center; background:#fef5e7; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:#e67e22;">' + bajos.length + '</div><div style="font-size:0.8rem; color:#e67e22;">Stock bajo</div></div>';
-          invHtml += '</div>';
-          var alertList = agotados.concat(bajos);
-          if (alertList.length === 0) {
-            invHtml += '<p style="color:var(--success); font-weight:600;">✅ Todos los productos con control tienen stock suficiente.</p>';
-          } else {
-            alertList.forEach(function (p) {
-              var color = p.stock <= 0 ? '#c0392b' : '#e67e22';
-              var etiqueta = p.stock <= 0 ? '⛔ Agotado' : (p.stock + ' u.');
-              invHtml += '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--warm);"><span>' + p.nombre + '</span><span style="font-weight:700; color:' + color + ';">' + etiqueta + '</span></div>';
-            });
-          }
-        }
-        invEl.innerHTML = invHtml;
-      }
+      // Alertas de inventario (usa el stock actual y el umbral configurable)
+      renderDashboardInventory();
 
       // Generar Reporte Contable
       renderAccountingReport(dashOrders);
@@ -1660,6 +1736,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       showToast('Reporte contable exportado', 'success');
     }
 
+    var ordersPage = 1;
+    var ordersPerPage = 50;
+
     function renderOrders() {
       var search = (document.getElementById('search') || { value: '' }).value.toLowerCase();
       var status = (document.getElementById('filter-status') || { value: '' }).value;
@@ -1688,7 +1767,6 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         }
         return true;
       }).sort(function(a, b) {
-        // Ordenar por número de pedido descendente (más reciente primero)
         return b.numero - a.numero;
       });
 
@@ -1701,13 +1779,18 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         return;
       }
 
+      var totalPages = Math.ceil(filtered.length / ordersPerPage);
+      if (ordersPage > totalPages) ordersPage = totalPages;
+      if (ordersPage < 1) ordersPage = 1;
+      var start = (ordersPage - 1) * ordersPerPage;
+      var pageOrders = filtered.slice(start, start + ordersPerPage);
+
       var html = '<table><thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Subtotal</th><th>Descuento</th><th>Total</th><th>Acciones</th></tr></thead><tbody>';
-      filtered.forEach(function (o) {
+      pageOrders.forEach(function (o) {
         var badgeClass = getStateColor(o.estado);
         var tipoEntrega = o.tipo_entrega === 'pickup' ? 'Pasar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envio' : '-';
         var nextState = getNextState(o.estado);
         
-        // Obtener etiqueta y color del botón según el siguiente estado
         var btnLabel = '';
         var btnBg = '#6c757d';
         if (nextState) {
@@ -1737,7 +1820,25 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         html += '<tr onclick="openEditModal(' + o.numero + ')" style="cursor:pointer"><td><span class="order-num">#' + String(o.numero).padStart(4, '0') + '</span></td><td>' + (o.fecha || '-') + '</td><td><strong>' + (o.cliente || '-') + '</strong><br><small style="color:var(--text-muted)">' + (o.telefono || '-') + '</small></td><td><span style="font-size:0.85rem">' + tipoEntrega + '</span></td><td><span class="badge badge-' + badgeClass + '">' + (o.estado || 'Pendiente') + '</span></td><td style="text-align:right;"><span style="font-size:0.85rem;color:#666;">' + (o.subtotal || 0).toLocaleString() + '</span></td><td style="text-align:right;">' + descuentoHtml + '</td><td style="text-align:right;"><strong>RD$ ' + (o.total || 0).toLocaleString() + '</strong></td><td onclick="event.stopPropagation()"><div class="actions"><button class="action-btn" onclick="sendConfirmation(' + o.numero + ')" style="background:' + btnBg + ';color:white;padding:6px 12px;border-radius:6px;font-weight:600;">' + btnLabel + '</button><button class="action-btn edit" onclick="openEditModal(' + o.numero + ')">Editar</button></div></td></tr>';
       });
       html += '</tbody></table>';
+
+      if (totalPages > 1) {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:0.85rem;">';
+        html += '<span style="color:var(--text-muted)">Mostrando ' + (start + 1) + '-' + Math.min(start + ordersPerPage, filtered.length) + ' de ' + filtered.length + ' pedidos</span>';
+        html += '<div style="display:flex;gap:8px;align-items:center;">';
+        html += '<button onclick="ordersPage=' + Math.max(1, ordersPage - 1) + ';renderOrders();" style="padding:6px 14px;background:var(--warm);border:none;border-radius:6px;cursor:pointer;font-weight:600;' + (ordersPage <= 1 ? 'opacity:0.4;pointer-events:none;' : '') + '">◀ Anterior</button>';
+        html += '<span style="font-weight:600;color:var(--primary);">Pág ' + ordersPage + ' de ' + totalPages + '</span>';
+        html += '<button onclick="ordersPage=' + Math.min(totalPages, ordersPage + 1) + ';renderOrders();" style="padding:6px 14px;background:var(--warm);border:none;border-radius:6px;cursor:pointer;font-weight:600;' + (ordersPage >= totalPages ? 'opacity:0.4;pointer-events:none;' : '') + '">Siguiente ▶</button>';
+        html += '</div></div>';
+      } else {
+        html += '<div style="padding:10px 0;font-size:0.85rem;color:var(--text-muted);text-align:center;">' + filtered.length + ' pedido' + (filtered.length !== 1 ? 's' : '') + '</div>';
+      }
+
       container.innerHTML = html;
+    }
+
+    function filterOrders() {
+      ordersPage = 1;
+      renderOrders();
     }
 
     function clearFilters() {
@@ -1748,6 +1849,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('filter-month').value = '';
       document.getElementById('filter-day').value = '';
       updateDayFilter();
+      ordersPage = 1;
       renderOrders();
     }
 
@@ -1770,11 +1872,19 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
             stockHtml = '<div style="padding:4px 12px;font-weight:600;color:#27ae60;">📦 Stock: ' + p.stock + '</div>';
           }
         }
+        var tipoBadge = '';
+        if (p.tipo === 'caja') {
+          var bc = p.box_config;
+          if (bc && typeof bc === 'string') { try { bc = JSON.parse(bc); } catch(e) { bc = null; } }
+          var sizesStr = bc && bc.sizes ? bc.sizes.join(', ') : '6, 12, 24';
+          tipoBadge = '<div style="font-size:0.75rem;background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-weight:600;margin:4px 0 0;">🎁 Caja (' + sizesStr + ')</div>';
+        }
         html += '<div class="product-card">'
           + imageHtml + placeholderHtml
           + '<div class="product-header">'
           + '<h3>' + p.nombre + '</h3>'
           + '<div class="product-price">RD$ ' + p.precio.toLocaleString() + '</div>'
+          + tipoBadge
           + '</div>'
           + stockHtml
           + '<div class="product-body"><p class="product-desc">' + (p.descripcion || 'Sin descripcion') + '</p><div class="product-actions"><button class="btn-edit" onclick="editProduct(' + p.id + ')">Editar</button><button class="btn-delete" onclick="confirmDeleteProduct(' + p.id + ')">Eliminar</button></div></div>'
@@ -1798,7 +1908,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
       document.getElementById('tab-' + tab).classList.remove('hidden');
       
-      var tabs = ['dashboard', 'pedidos', 'productos', 'preparacion', 'promociones', 'clientes', 'config'];
+      var tabs = ['dashboard', 'pedidos', 'productos', 'inventario', 'preparacion', 'promociones', 'clientes', 'config'];
       var tabIndex = tabs.indexOf(tab);
       if (tabIndex >= 0) {
         var tabBtn = document.querySelectorAll('.tab')[tabIndex];
@@ -1806,14 +1916,16 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         tabBtn.classList.remove('pulse'); // Quitar efecto de nuevo pedido al entrar
       }
       if (tab === 'pedidos') {
+        ordersPage = 1;
         populateDateFilters();
         updatePedidosCounters();
         renderOrders();
       }
+      if (tab === 'inventario') renderInventario();
       if (tab === 'preparacion') renderPreparacion();
       if (tab === 'promociones') loadPromos();
-      if (tab === 'clientes') { loadClientes(); }
-      if (tab === 'config') loadConfig();
+      if (tab === 'clientes') { clientesPage = 1; loadClientes(); }
+      if (tab === 'config') { loadConfig(); loadBoxConfig(); }
     }
 
     function updatePedidosCounters() {
@@ -1849,14 +1961,12 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         } catch(e) {}
       }
 
-      var totalesHtml = '<div style="background:var(--cream);padding:12px;border-radius:8px;margin:10px 0;">';
-      totalesHtml += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--warm);"><span>Subtotal:</span><span>RD$ ' + (editingOrder.subtotal || 0).toLocaleString() + '</span></div>';
+      var totalesHtml = '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--warm);"><span style="color:var(--text-muted);">Subtotal:</span><span>RD$ ' + (editingOrder.subtotal || 0).toLocaleString() + '</span></div>';
       if (editingOrder.descuento && editingOrder.descuento > 0) {
-        totalesHtml += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--warm);color:#28a745;"><span>🎉 Descuento:</span><span>-RD$ ' + (editingOrder.descuento || 0).toLocaleString() + '</span></div>';
+        totalesHtml += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--warm);color:#28a745;"><span>🎉 Descuento:</span><span>-RD$ ' + (editingOrder.descuento || 0).toLocaleString() + '</span></div>';
       }
-      totalesHtml += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--warm);"><span>Envío:</span><span>RD$ ' + (editingOrder.envio || 0).toLocaleString() + '</span></div>';
-      totalesHtml += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:1.2rem;font-weight:700;color:var(--accent);"><span>TOTAL:</span><span>RD$ ' + (editingOrder.total || 0).toLocaleString() + '</span></div>';
-      totalesHtml += '</div>';
+      totalesHtml += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--warm);"><span style="color:var(--text-muted);">Envío:</span><span>RD$ ' + (editingOrder.envio || 0).toLocaleString() + '</span></div>';
+      totalesHtml += '<div style="display:flex;justify-content:space-between;padding:10px 0 0;font-size:1.3rem;font-weight:700;color:var(--accent);"><span>TOTAL:</span><span>RD$ ' + (editingOrder.total || 0).toLocaleString() + '</span></div>';
       
       // Botón de acción según estado
       var actionBtnHtml = '';
@@ -1875,31 +1985,79 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       }
 
       var detallesHtml = '';
-      detallesHtml += '<div style="margin-bottom:20px;">';
-      detallesHtml += '<span class="badge badge-' + badgeClass + '" style="font-size:1.1rem;padding:10px 20px;">' + getStateIcon(editingOrder.estado) + ' ' + editingOrder.estado + '</span>';
-      detallesHtml += actionBtnHtml;
+
+      // Encabezado: estado + acción
+      detallesHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid var(--warm);">';
+      detallesHtml += '<div><span class="badge badge-' + badgeClass + '" style="font-size:1.2rem;padding:12px 24px;border-radius:12px;">' + getStateIcon(editingOrder.estado) + ' ' + editingOrder.estado + '</span>';
+      if (editingOrder.observaciones) {
+        detallesHtml += '<div style="margin-top:8px;font-size:0.85rem;color:var(--text-muted);max-width:300px;line-height:1.4;">📌 ' + editingOrder.observaciones + '</div>';
+      }
       detallesHtml += '</div>';
-      
-      detallesHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">';
-      detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📅 Fecha</div><div style="font-weight:600;">' + (editingOrder.fecha || '-') + '</div></div>';
-      detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">👤 Cliente</div><div style="font-weight:600;">' + (editingOrder.cliente || '-') + '</div></div>';
-      detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📱 Teléfono</div><div style="font-weight:600;">' + (editingOrder.telefono || '-') + '</div></div>';
-      detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">🚚 Entrega</div><div style="font-weight:600;">' + tipoTexto + '</div></div>';
+      detallesHtml += '<div style="display:flex;gap:10px;align-items:center;">' + actionBtnHtml + '</div>';
+      detallesHtml += '</div>';
+
+      // Info del pedido en cards
+      detallesHtml += '<div style="margin-bottom:24px;">';
+      detallesHtml += '<h4 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">📋 Información del pedido</h4>';
+      detallesHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">';
+      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📅 Fecha</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.fecha || '-') + '</div></div>';
+      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">👤 Cliente</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.cliente || '-') + '</div></div>';
+      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📱 Teléfono</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.telefono || '-') + '</div></div>';
+      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">🚚 Entrega</div><div style="font-weight:600;font-size:1rem;">' + tipoTexto + '</div></div>';
       if (editingOrder.direccion) {
-        detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;grid-column:1/-1;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📍 Dirección</div><div style="font-weight:600;">' + editingOrder.direccion + '</div></div>';
+        detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);grid-column:1/-1;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📍 Dirección</div><div style="font-weight:600;font-size:1rem;">' + editingOrder.direccion + '</div></div>';
       }
       if (editingOrder.nota) {
-        detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;grid-column:1/-1;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📝 Nota</div><div style="font-weight:600;">' + editingOrder.nota + '</div></div>';
+        detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);grid-column:1/-1;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📝 Nota del cliente</div><div style="font-weight:600;font-size:1rem;">' + editingOrder.nota + '</div></div>';
       }
-      detallesHtml += '</div>';
-      
-      detallesHtml += promosHtml;
-      
-      detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;margin-bottom:16px;"><div style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">🍪 Productos</div><div style="white-space:pre-wrap;font-size:0.9rem;padding:8px;background:white;border-radius:6px;">' + (editingOrder.productos || 'Sin productos') + '</div></div>';
-      
-      detallesHtml += '<div style="background:var(--cream);padding:12px;border-radius:8px;margin-bottom:16px;"><div style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">💳 Pago</div><div style="font-weight:600;">' + (editingOrder.pago || 'Por definir') + '</div></div>';
-      
-      detallesHtml += totalesHtml;
+      detallesHtml += '</div></div>';
+
+      // Productos
+      detallesHtml += '<div style="margin-bottom:24px;">';
+      detallesHtml += '<h4 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">🍪 Productos</h4>';
+      var prodItems = (editingOrder.productos || '').split(',').map(function(p) { return p.trim(); }).filter(Boolean);
+      detallesHtml += '<div style="background:white;border:1px solid var(--warm);border-radius:12px;overflow:hidden;">';
+      prodItems.forEach(function(p, i) {
+        detallesHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;' + (i < prodItems.length - 1 ? 'border-bottom:1px solid var(--warm);' : '') + '"><span style="font-weight:500;">🍪 ' + p + '</span></div>';
+      });
+      detallesHtml += '</div></div>';
+
+      // Promociones
+      if (promosHtml) {
+        detallesHtml += '<div style="margin-bottom:24px;">';
+        detallesHtml += '<h4 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">🎉 Promociones</h4>';
+        detallesHtml += promosHtml;
+        detallesHtml += '</div>';
+      }
+
+      // Pago y Totales
+      detallesHtml += '<div style="margin-bottom:24px;">';
+      detallesHtml += '<h4 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">💳 Pago</h4>';
+      detallesHtml += '<div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;">';
+      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Método</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.pago || 'Por definir') + '</div></div>';
+      detallesHtml += '<div style="background:white;padding:16px 20px;border-radius:10px;border:1px solid var(--warm);">' + totalesHtml + '</div>';
+      detallesHtml += '</div></div>';
+
+      // Historial de cambios de estado (a partir de estado_timestamps)
+      var ts = editingOrder.estado_timestamps || {};
+      var eventos = Object.keys(ts)
+        .filter(function (k) { return k !== 'anterior' && ts[k]; })
+        .map(function (k) { return { estado: k, time: ts[k] }; })
+        .sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
+      if (eventos.length > 0) {
+        detallesHtml += '<div style="margin-bottom:24px;">';
+        detallesHtml += '<h4 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">🕒 Historial de estados</h4>';
+        detallesHtml += '<div style="background:white;border:1px solid var(--warm);border-radius:12px;overflow:hidden;">';
+        eventos.forEach(function (ev, i) {
+          var d = new Date(ev.time);
+          var fecha = isNaN(d.getTime()) ? '' : d.toLocaleString('es-DO', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+          detallesHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;' + (i < eventos.length - 1 ? 'border-bottom:1px solid var(--warm);' : '') + '">';
+          detallesHtml += '<span style="font-weight:600;">' + getStateIcon(ev.estado) + ' ' + ev.estado + '</span>';
+          detallesHtml += '<span style="font-size:0.85rem;color:var(--text-muted);">' + fecha + '</span>';
+          detallesHtml += '</div>';
+        });
+        detallesHtml += '</div></div>';
+      }
 
       document.getElementById('modal-detalles').innerHTML = detallesHtml;
 
@@ -2012,23 +2170,36 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('confirm-title').textContent = 'Cancelar pedido?';
       document.getElementById('confirm-message').textContent = 'Cancelar #' + String(numero).padStart(4, '0') + '?';
       document.getElementById('confirm-btn').onclick = function () {
-        fetch(API_URL + '/api/orders/' + numero, {
+        apiFetch(API_URL + '/api/orders/' + numero, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hardDelete: false })
         })
-          .then(function (r) { if (r.ok) { closeConfirm(); loadData(); showToast('Pedido cancelado', 'success'); } });
+          .then(function (r) {
+            if (r.ok) { closeConfirm(); loadData(); showToast('Pedido cancelado', 'success'); }
+            else { r.json().then(function(d) { showToast(d.error || 'Error al cancelar', 'error'); }).catch(function() { showToast('Error al cancelar', 'error'); }); }
+          })
+          .catch(function() { showToast('Error de conexión', 'error'); });
       };
       document.getElementById('confirm-overlay').classList.add('open');
     }
 
     function confirmDeleteProduct(id) {
       editingProduct = id;
+      var p = products.find(function (prod) { return prod.id === id; });
+      if (p && p.tipo === 'caja') {
+        showToast('No puedes eliminar una Caja Personalizada', 'error');
+        return;
+      }
       document.getElementById('confirm-title').textContent = 'Eliminar producto?';
       document.getElementById('confirm-message').textContent = 'Eliminar este producto?';
       document.getElementById('confirm-btn').onclick = function () {
-        fetch(API_URL + '/api/products/' + id, { method: 'DELETE' })
-          .then(function (r) { if (r.ok) { closeConfirm(); loadData(); showToast('Eliminado', 'success'); } });
+        apiFetch(API_URL + '/api/products/' + id, { method: 'DELETE' })
+          .then(function (r) {
+            if (r.ok) { closeConfirm(); loadData(); showToast('Eliminado', 'success'); }
+            else { r.json().then(function(d) { showToast(d.error || 'Error al eliminar', 'error'); }).catch(function() { showToast('Error al eliminar', 'error'); }); }
+          })
+          .catch(function() { showToast('Error de conexión', 'error'); });
       };
       document.getElementById('confirm-overlay').classList.add('open');
     }
@@ -2178,6 +2349,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
             }
           });
         }
+        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡HOLA ' + (order.cliente || '').toUpperCase() + '!*\n' +
           'Recibimos tu pedido #' + String(order.numero).padStart(4, '0') + ' 🎉\n\n' +
@@ -2193,24 +2365,29 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           '*⏳ PRÓXIMO PASO*\n' +
           'Por favor, realiza la transferencia y envíame el comprobante aquí.\n' +
           'Una vez confirmado tu pago, comenzaremos a preparar tu pedido.\n\n' +
+          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Gracias por tu compra! 🍪';
       }
       
       if (nuevoEstado === 'Confirmado') {
+        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡PAGO CONFIRMADO! ✅*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Tu pago ha sido confirmado. Comenzaremos a preparar tu pedido pronto.\n\n' +
+          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Te avisaremos cuando esté listo! 🍪';
       }
 
       if (nuevoEstado === 'Preparando') {
+        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡TU PEDIDO ESTÁ SIENDO PREPARADO! 🍪*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
-          'Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo. 🎉';
+          'Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo.\n\n' +
+          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + ' 🎉';
       }
       
       if (nuevoEstado === 'Listo') {
@@ -2219,17 +2396,21 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           : tipoEntrega === 'delivery'
           ? '🎉 *¡TU PEDIDO ESTÁ LISTO!*\n\nSaldrá pronto hacia tu dirección.'
           : '🎉 *¡TU PEDIDO HA SIDO ENVIADO!*\n\nTe llegará en los próximos días.';
+        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' + listoMsg + '\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
+          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Gracias por tu compra! 🍪';
       }
 
       if (nuevoEstado === 'Entregado') {
+        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡PEDIDO ENTREGADO! 🎉*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Tu pedido ha sido entregado exitosamente.\n\n' +
+          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Gracias por tu compra! Vuelve pronto 🍪';
       }
       
@@ -2484,9 +2665,40 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       return html;
     }
 
+    function toggleProductTipo() {
+      var tipo = document.querySelector('input[name="product-tipo"]:checked');
+      document.getElementById('box-config-fields').style.display = tipo && tipo.value === 'caja' ? 'block' : 'none';
+      if (tipo && tipo.value === 'caja') loadBoxAllowedProducts();
+    }
+
+    function loadBoxAllowedProducts() {
+      var container = document.getElementById('box-allowed-products');
+      apiFetch(API_URL + '/api/products').then(function(res) {
+        if (!res.ok) return;
+        res.json().then(function(prods) {
+          var filtered = prods.filter(function(p) { return p.id != 7 && p.tipo !== 'caja'; });
+          if (filtered.length === 0) {
+            container.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">No hay productos disponibles</p>';
+            return;
+          }
+          // Obtener productos actualmente seleccionados
+          var currentAllowed = [];
+          var boxConfigStr = document.getElementById('product-box-config').value;
+          if (boxConfigStr) {
+            try { var bc = JSON.parse(boxConfigStr); currentAllowed = bc.allowedProducts || []; } catch(e) {}
+          }
+          container.innerHTML = filtered.map(function(p) {
+            var checked = currentAllowed.indexOf(p.id) >= 0;
+            return '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 6px;border-radius:4px;background:' + (checked ? '#e8f5e9' : 'white') + ';border:1px solid ' + (checked ? '#a5d6a7' : '#eee') + ';">' +
+              '<input type="checkbox" class="box-allowed-cb" value="' + p.id + '" ' + (checked ? 'checked' : '') + ' style="margin:0;width:14px;height:14px;"> <span style="flex:1;font-size:0.85rem;line-height:1.3;">' + p.nombre + '</span> <span style="color:#999;font-size:0.75rem;">RD$' + p.precio + '</span></label>';
+          }).join('');
+        });
+      }).catch(function() { container.innerHTML = '<p style="color:#999;font-size:0.85rem;">Error al cargar</p>'; });
+    }
+
     function openProductModal(id) {
       editingProduct = id;
-      document.getElementById('product-modal-title').textContent = id ? 'Editar' : 'Nuevo Producto';
+      document.getElementById('product-modal-title').textContent = id ? 'Editar Producto' : 'Nuevo Producto';
       document.getElementById('product-name').value = '';
       document.getElementById('product-price').value = '';
       document.getElementById('product-desc').value = '';
@@ -2494,6 +2706,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('product-image').value = '';
       document.getElementById('product-image-preview').style.display = 'none';
       document.getElementById('preview-img').src = '';
+      document.getElementById('product-box-config').value = '';
+      document.getElementById('box-config-fields').style.display = 'none';
+      document.querySelector('input[name="product-tipo"][value="producto"]').checked = true;
 
       if (id) {
         var p = products.find(function (prod) { return prod.id === id; });
@@ -2507,6 +2722,22 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
             var imgUrl = p.imagen.startsWith('http') ? p.imagen : API_URL + p.imagen;
             document.getElementById('preview-img').src = imgUrl;
             document.getElementById('product-image-preview').style.display = 'block';
+          }
+          // Tipo y box config
+          if (p.tipo === 'caja') {
+            document.querySelector('input[name="product-tipo"][value="caja"]').checked = true;
+            document.getElementById('box-config-fields').style.display = 'block';
+            var bc = p.box_config;
+            if (bc && typeof bc === 'string') { try { bc = JSON.parse(bc); } catch(e) { bc = null; } }
+            if (bc && bc.sizes) {
+              document.querySelectorAll('#box-config-fields .box-size-cb').forEach(function(cb) {
+                cb.checked = bc.sizes.indexOf(parseInt(cb.value)) >= 0;
+              });
+            } else {
+              document.querySelectorAll('#box-config-fields .box-size-cb').forEach(function(cb) { cb.checked = true; });
+            }
+            document.getElementById('product-box-config').value = JSON.stringify(bc || { sizes: [6, 12, 24], allowedProducts: [] });
+            loadBoxAllowedProducts();
           }
         }
       }
@@ -2542,11 +2773,14 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
     async function saveProduct() {
       var nombre = document.getElementById('product-name').value.trim();
-      var precio = parseFloat(document.getElementById('product-price').value);
+      var precio = parseFloat(document.getElementById('product-price').value) || 0;
       var descripcion = document.getElementById('product-desc').value.trim();
       var imagenData = document.getElementById('product-image').value;
+      var tipo = document.querySelector('input[name="product-tipo"]:checked');
+      var tipoVal = tipo ? tipo.value : 'producto';
 
-      if (!nombre || !precio) { showToast('Completa campos requeridos', 'error'); return; }
+      if (!nombre) { showToast('Completa los campos requeridos', 'error'); return; }
+      if (tipoVal !== 'caja' && (!precio || precio <= 0)) { showToast('Ingresa un precio válido', 'error'); return; }
 
       try {
         var imagen = '';
@@ -2568,7 +2802,18 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         }
 
         var stockInput = document.getElementById('product-stock').value.trim();
-        var productData = { nombre: nombre, precio: precio, descripcion: descripcion, imagen: imagen, stock: stockInput };
+
+        // Build box config
+        var boxConfig = null;
+        if (tipoVal === 'caja') {
+          var sizes = [];
+          document.querySelectorAll('#box-config-fields .box-size-cb:checked').forEach(function(cb) { sizes.push(parseInt(cb.value)); });
+          var allowedProducts = [];
+          document.querySelectorAll('.box-allowed-cb:checked').forEach(function(cb) { allowedProducts.push(parseInt(cb.value)); });
+          boxConfig = { sizes: sizes.length > 0 ? sizes : [6], allowedProducts: allowedProducts };
+        }
+
+        var productData = { nombre: nombre, precio: precio, descripcion: descripcion, imagen: imagen, stock: stockInput, tipo: tipoVal, box_config: boxConfig };
 
         var url = editingProduct ? API_URL + '/api/products/' + editingProduct : API_URL + '/api/products';
         var method = editingProduct ? 'PUT' : 'POST';
@@ -2735,6 +2980,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('promo-color').value = '#C9883A';
       document.getElementById('promo-orden').value = '0';
       document.getElementById('promo-activa').checked = true;
+      document.getElementById('promo-solo-cajas').checked = false;
       togglePromoFields();
       
       // Si es edición, cargar datos existentes
@@ -2758,6 +3004,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           document.getElementById('promo-hora-inicio').value = promo.hora_inicio || '';
           document.getElementById('promo-hora-fin').value = promo.hora_fin || '';
           document.getElementById('promo-activa').checked = promo.activa == 1;
+          document.getElementById('promo-solo-cajas').checked = promo.solo_cajas == 1;
           togglePromoFields();
         }
       }
@@ -2791,8 +3038,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         fecha_fin: document.getElementById('promo-fin').value,
         hora_inicio: document.getElementById('promo-hora-inicio').value,
         hora_fin: document.getElementById('promo-hora-fin').value,
-        activa: document.getElementById('promo-activa').checked
-      };
+    activa: document.getElementById('promo-activa').checked,
+    solo_cajas: document.getElementById('promo-solo-cajas').checked ? 1 : 0
+  };
       try {
         var url = editingPromo ? API_URL + '/api/promociones/' + editingPromo : API_URL + '/api/promociones';
         var method = editingPromo ? 'PUT' : 'POST';
@@ -2809,10 +3057,11 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var promo = promos.find(function(p) { return p.id === id; });
       if (!promo) return;
       try {
-        await apiFetch(API_URL + '/api/promociones/' + id, {
+        var res = await apiFetch(API_URL + '/api/promociones/' + id, {
           method: 'PUT', headers: {'Content-Type':'application/json'},
           body: JSON.stringify(Object.assign({}, promo, { activa: activa }))
         });
+        if (!res.ok) { showToast('Error al cambiar estado', 'error'); return; }
         showToast(activa ? 'Oferta activada ✅' : 'Oferta desactivada', activa ? 'success' : 'info');
         loadPromos();
       } catch(err) { showToast('Error', 'error'); }
@@ -2859,11 +3108,12 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
     async function showClientesReport() {
       try {
-        var res = await apiFetch(API_URL + '/api/clientes/all');
+        var res = await apiFetch(API_URL + '/api/clientes/all?all=true');
         if (!res.ok) throw new Error('Error');
         var clientes = await res.json();
         
-        var res2 = await apiFetch(API_URL + '/api/orders');
+        var res2 = await apiFetch(API_URL + '/api/orders?all=true');
+        if (!res2.ok) { showToast('Error al cargar pedidos', 'error'); return; }
         var ordersAll = await res2.json();
         
         var totalClientes = clientes.length;
@@ -2991,7 +3241,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
     async function exportClientes() {
       try {
-        var res = await apiFetch(API_URL + '/api/clientes/all');
+        var res = await apiFetch(API_URL + '/api/clientes/all?all=true');
         if (!res.ok) throw new Error('Error');
         var clientes = await res.json();
 
@@ -3082,11 +3332,12 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
     async function exportClientesHistorial() {
       try {
-        var res = await apiFetch(API_URL + '/api/orders');
+        var res = await apiFetch(API_URL + '/api/orders?all=true');
         if (!res.ok) throw new Error('Error');
         var ordersAll = await res.json();
 
-        var res2 = await apiFetch(API_URL + '/api/clientes/all');
+        var res2 = await apiFetch(API_URL + '/api/clientes/all?all=true');
+        if (!res2.ok) { showToast('Error al cargar clientes', 'error'); return; }
         var clientes = await res2.json();
 
         if (clientes.length === 0) {
@@ -3519,6 +3770,249 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       XLSX.writeFile(wb, 'ESME_Reporte_Pedidos_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
 
       showToast('Reporte exportado exitosamente', 'success');
+    }
+
+    function renderDashboardInventory() {
+      var invEl = document.getElementById('inventory-alerts');
+      if (!invEl) return;
+      var conStock = products.filter(function (p) { return p.stock !== null && p.stock !== undefined; });
+      var agotados = conStock.filter(function (p) { return p.stock <= 0; });
+      var threshold = window._invThreshold || 5;
+      var bajos = conStock.filter(function (p) { return p.stock > 0 && p.stock <= threshold; });
+      var totalUnidades = conStock.reduce(function(s, p) { return s + p.stock; }, 0);
+      var invHtml = '';
+      if (conStock.length === 0) {
+        invHtml = '<p style="color:var(--text-muted);">Ningún producto tiene control de stock. Asigná un stock a un producto en la pestaña Productos para verlo acá.</p>';
+      } else {
+        invHtml += '<div style="display:flex; gap:10px; margin-bottom:14px;">';
+        invHtml += '<div style="flex:1; text-align:center; background:#e8f5e9; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:var(--success);">' + totalUnidades + '</div><div style="font-size:0.8rem; color:var(--success);">Unidades</div></div>';
+        invHtml += '<div style="flex:1; text-align:center; background:#fdecea; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:#c0392b;">' + agotados.length + '</div><div style="font-size:0.8rem; color:#c0392b;">Agotados</div></div>';
+        invHtml += '<div style="flex:1; text-align:center; background:#fef5e7; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:#e67e22;">' + bajos.length + '</div><div style="font-size:0.8rem; color:#e67e22;">Stock bajo</div></div>';
+        invHtml += '</div>';
+        var alertList = agotados.concat(bajos);
+        if (alertList.length === 0) {
+          invHtml += '<p style="color:var(--success); font-weight:600;">✅ Todos los productos tienen stock suficiente (umbral: ' + threshold + ').</p>';
+        } else {
+          alertList.forEach(function (p) {
+            var color = p.stock <= 0 ? '#c0392b' : '#e67e22';
+            var etiqueta = p.stock <= 0 ? '⛔ Agotado' : (p.stock + ' u.');
+            invHtml += '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--warm);"><span>' + p.nombre + '</span><span style="font-weight:700; color:' + color + ';">' + etiqueta + '</span></div>';
+          });
+        }
+      }
+      invEl.innerHTML = invHtml;
+    }
+
+    // ====== INVENTARIO ======
+    var inventoryData = [];
+
+    function renderInventario() {
+      apiFetch('/api/inventory')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(data) {
+          inventoryData = Array.isArray(data) ? data : [];
+          renderInventoryTable();
+          loadInventorySummary();
+          loadInventoryConfig();
+          loadMovementProductSelect();
+          renderMovements();
+        })
+        .catch(function(e) { console.error('Error loading inventory:', e); });
+    }
+
+    function renderInventoryTable() {
+      var estadoFiltro = (document.getElementById('inv-filter-estado') || {}).value || '';
+      var busqueda = ((document.getElementById('inv-search') || {}).value || '').toLowerCase();
+      var tbody = document.getElementById('inv-tbody');
+      var empty = document.getElementById('inv-empty');
+      if (!tbody) return;
+
+      var filtered = inventoryData.filter(function(p) {
+        if (estadoFiltro && p.estado !== estadoFiltro) return false;
+        if (busqueda && p.nombre.toLowerCase().indexOf(busqueda) === -1) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+
+      var html = '';
+      filtered.forEach(function(p) {
+        var estadoClass = p.estado === 'agotado' ? 'var(--danger)' : p.estado === 'bajo' ? 'var(--warning)' : p.estado === 'ok' ? 'var(--success)' : 'var(--text-muted)';
+        var estadoText = p.estado === 'agotado' ? '⛔ Agotado' : p.estado === 'bajo' ? '⚠️ Bajo' : p.estado === 'ok' ? '✅ Ok' : '— Sin control';
+        var stockDisplay = p.sinControl ? '—' : p.stock;
+        html += '<tr style="border-bottom:1px solid var(--warm);">';
+        html += '<td style="padding:12px 16px; font-weight:600;">' + p.nombre + '</td>';
+        html += '<td style="padding:12px 16px; text-align:center;">RD$ ' + (p.precio || 0).toLocaleString() + '</td>';
+        html += '<td style="padding:12px 16px; text-align:center; font-weight:700; font-size:1.1rem;">' + stockDisplay + '</td>';
+        html += '<td style="padding:12px 16px; text-align:center;"><span style="color:' + estadoClass + '; font-weight:600;">' + estadoText + '</span></td>';
+        html += '<td style="padding:12px 16px; text-align:right;">';
+        html += '<div style="display:flex; gap:6px; justify-content:flex-end;">';
+        html += '<button onclick="quickStockAdjust(' + p.id + ',\'' + p.nombre.replace(/'/g, "\\'") + '\',-1)" style="padding:4px 12px; background:#e74c3c; color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem;" title="Restar 1">−1</button>';
+        html += '<button onclick="quickStockAdjust(' + p.id + ',\'' + p.nombre.replace(/'/g, "\\'") + '\',1)" style="padding:4px 12px; background:#27ae60; color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem;" title="Sumar 1">+1</button>';
+        html += '<button onclick="openStockAdjustModal(' + p.id + ')" style="padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem;">✏️</button>';
+        html += '</div></td></tr>';
+      });
+      tbody.innerHTML = html;
+    }
+
+    function loadInventorySummary() {
+      apiFetch('/api/inventory/summary')
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(s) {
+          if (!s || s.error) return;
+          setText('inv-total', s.totalProductos);
+          setText('inv-con-stock', s.conStock);
+          setText('inv-bajo', s.stockBajo);
+          setText('inv-agotados', s.agotados);
+          setText('inv-unidades', s.totalUnidades);
+        })
+        .catch(function(e) { console.error('Error loading summary:', e); });
+    }
+
+    function loadInventoryConfig() {
+      apiFetch('/api/inventory/alerts')
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(c) {
+          if (document.getElementById('inv-threshold')) document.getElementById('inv-threshold').value = c.umbralMinimo || 5;
+          if (document.getElementById('inv-alerts-toggle')) document.getElementById('inv-alerts-toggle').checked = c.alertasActivas !== false;
+        })
+        .catch(function(e) { console.error('Error loading config:', e); });
+    }
+
+    function saveInventoryThreshold(val) {
+      apiFetch('/api/inventory/alerts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ umbralMinimo: parseInt(val) || 5 })
+      }).then(function(r) {
+        if (r.ok) showToast('Umbral guardado ✅', 'success');
+        else showToast('Error al guardar umbral', 'error');
+      }).catch(function(e) { showToast('Error de conexión', 'error'); });
+    }
+
+    function toggleInventoryAlerts(active) {
+      apiFetch('/api/inventory/alerts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alertasActivas: active })
+      }).then(function(r) {
+        if (r.ok) showToast('Alertas ' + (active ? 'activadas' : 'desactivadas') + ' ✅', 'success');
+        else showToast('Error al cambiar alertas', 'error');
+      }).catch(function(e) { showToast('Error de conexión', 'error'); });
+    }
+
+    function openStockAdjustModal(productId) {
+      var select = document.getElementById('adjust-producto');
+      if (!select) return;
+      select.innerHTML = '';
+      inventoryData.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nombre + ' (Stock: ' + (p.sinControl ? '—' : p.stock) + ')';
+        select.appendChild(opt);
+      });
+      if (productId) select.value = productId;
+      document.getElementById('stock-adjust-modal').style.display = 'flex';
+    }
+
+    function closeStockAdjustModal() {
+      document.getElementById('stock-adjust-modal').style.display = 'none';
+    }
+
+    function saveStockAdjust() {
+      var productoId = document.getElementById('adjust-producto').value;
+      var tipo = document.getElementById('adjust-tipo').value;
+      var cantidad = parseInt(document.getElementById('adjust-cantidad').value) || 1;
+      var motivo = document.getElementById('adjust-motivo').value;
+      if (!productoId) { showToast('Seleccioná un producto', 'error'); return; }
+      apiFetch('/api/inventory/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ producto_id: parseInt(productoId), tipo: tipo, cantidad: cantidad, motivo: motivo })
+      })
+      .then(function(r) { return r.ok ? r.json() : { error: 'Error de conexión' }; })
+      .then(function(res) {
+        if (res.success) {
+          showToast(res.producto + ': ' + res.stock_anterior + ' → ' + res.stock_nuevo + ' unidades', 'success');
+          closeStockAdjustModal();
+          renderInventario();
+        } else {
+          showToast(res.error || 'Error al ajustar stock', 'error');
+        }
+      })
+      .catch(function(e) { showToast('Error de conexión', 'error'); });
+    }
+
+    function quickStockAdjust(id, nombre, delta) {
+      apiFetch('/api/inventory/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ producto_id: id, tipo: delta > 0 ? 'entrada' : 'salida', cantidad: Math.abs(delta), motivo: 'Ajuste rápido' })
+      })
+      .then(function(r) { return r.ok ? r.json() : { error: 'Error de conexión' }; })
+      .then(function(res) {
+        if (res.success) {
+          showToast(nombre + ': ' + res.stock_anterior + ' → ' + res.stock_nuevo, 'success');
+          renderInventario();
+        }
+      })
+      .catch(function(e) { showToast('Error de conexión', 'error'); });
+    }
+
+    function loadMovementProductSelect() {
+      var select = document.getElementById('inv-mov-producto');
+      if (!select) return;
+      var currentVal = select.value;
+      select.innerHTML = '<option value="">Todos los productos</option>';
+      inventoryData.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nombre;
+        select.appendChild(opt);
+      });
+      if (currentVal) select.value = currentVal;
+    }
+
+    function renderMovements() {
+      var container = document.getElementById('movements-list');
+      if (!container) return;
+      var productId = (document.getElementById('inv-mov-producto') || {}).value || '';
+      var url = '/api/inventory/movements?limit=50';
+      if (productId) url += '&producto_id=' + productId;
+      apiFetch(url)
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(movements) {
+          if (!Array.isArray(movements) || movements.length === 0) {
+            container.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">Sin movimientos registrados.</p>';
+            return;
+          }
+          var html = '';
+          movements.forEach(function(m) {
+            var signo = (m.tipo === 'entrada' || m.tipo === 'compra' || m.tipo === 'devolucion') ? '+' : '-';
+            var color = (m.tipo === 'entrada' || m.tipo === 'compra' || m.tipo === 'devolucion') ? 'var(--success)' : 'var(--danger)';
+            var tipoTxt = m.tipo === 'venta' ? 'Venta' : m.tipo === 'entrada' ? 'Entrada' : m.tipo === 'salida' ? 'Salida' : m.tipo === 'compra' ? 'Compra' : m.tipo === 'devolucion' ? 'Devolución' : 'Ajuste';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--warm);">';
+            html += '<div style="flex:2;"><strong>' + (m.producto_nombre || 'Producto #' + m.producto_id) + '</strong><br><span style="font-size:0.8rem; color:var(--text-muted);">' + tipoTxt + (m.motivo ? ' — ' + m.motivo : '') + (m.referencia ? ' (Ref: ' + m.referencia + ')' : '') + '</span></div>';
+            html += '<div style="text-align:right;"><span style="font-weight:700; color:' + color + '; font-size:1.1rem;">' + signo + Math.abs(m.cantidad) + '</span>';
+            if (m.stock_anterior !== null && m.stock_nuevo !== null) {
+              html += '<br><span style="font-size:0.75rem; color:var(--text-muted);">' + m.stock_anterior + ' → ' + m.stock_nuevo + '</span>';
+            }
+            html += '<br><span style="font-size:0.75rem; color:var(--text-muted);">' + (m.created_at || '').split('.')[0] + '</span>';
+            html += '</div></div>';
+          });
+          container.innerHTML = html;
+        })
+        .catch(function(e) { console.error('Error loading movements:', e); });
+    }
+
+    function setText(id, val) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = val;
     }
 
     if (sessionStorage.getItem('admin_logged') === 'true') {

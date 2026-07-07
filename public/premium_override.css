@@ -216,6 +216,12 @@ button:not([class*="stat"]) {
     color: var(--text) !important;
 }
 
+/* Modal headers must remain readable on dark gradient background */
+.modal-header h2,
+.modal-header h2 span {
+    color: #fff !important;
+}
+
 .tab {
     color: #2D1E12 !important;
 }

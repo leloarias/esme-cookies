@@ -151,8 +151,29 @@ async function initDatabase() {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS movimientos_stock (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      producto_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'ajuste',
+      cantidad INTEGER NOT NULL,
+      stock_anterior INTEGER,
+      stock_nuevo INTEGER,
+      motivo TEXT,
+      referencia TEXT,
+      created_by TEXT DEFAULT 'sistema',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (producto_id) REFERENCES productos(id)
+    )
+  `);
+
   // Migraciones para bases de datos ya existentes (columnas agregadas después).
   await ensureColumn('productos', 'stock', 'INTEGER');
+  await ensureColumn('config', 'lowStockThreshold', 'INTEGER DEFAULT 5');
+  await ensureColumn('config', 'inventoryAlertsEnabled', 'INTEGER DEFAULT 1');
+  await ensureColumn('config', 'customBoxConfig', 'TEXT');
+  await ensureColumn('productos', 'tipo', "TEXT DEFAULT 'producto'");
+  await ensureColumn('productos', 'box_config', 'TEXT');
 
   // Inicializar config si está vacía
   const configCount = await db.execute('SELECT COUNT(*) as count FROM config');
@@ -162,6 +183,19 @@ async function initDatabase() {
       args: ['Calle Principal #1, San Juan', 50, 100]
     });
   }
+
+  // Asegurar que exista el producto "Caja Personalizada"
+  const boxExists = await db.execute("SELECT COUNT(*) as c FROM productos WHERE id = 7");
+  if (Number(boxExists.rows[0].c) === 0) {
+    await db.execute({
+      sql: "INSERT INTO productos (id, nombre, precio, descripcion, stock, tipo, box_config) VALUES (7, ?, ?, ?, NULL, 'caja', ?)",
+      args: ['Caja Personalizada', 0, 'Selecciona tus galletas favoritas', JSON.stringify({ sizes: [6, 12, 24], allowedProducts: [] })]
+    });
+    console.log('[DB] Producto "Caja Personalizada" creado');
+  }
+
+  // Migraciones
+  await ensureColumn('promociones', 'solo_cajas', 'INTEGER DEFAULT 0');
 
   // Inicializar admin por defecto si no existe
   const adminCount = await db.execute('SELECT COUNT(*) as count FROM administradores');

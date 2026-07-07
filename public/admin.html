@@ -54,7 +54,8 @@
         <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
         <button class="tab" onclick="showTab('pedidos')">Pedidos</button>
         <button class="tab" onclick="showTab('productos')">Productos</button>
-        <button class="tab" onclick="showTab('preparacion')">Preparacion</button>
+          <button class="tab" onclick="showTab('inventario')">📦 Inventario</button>
+          <button class="tab" onclick="showTab('preparacion')">Preparacion</button>
         <button class="tab" onclick="showTab('promociones')">🎉 Ofertas</button>
         <button class="tab" onclick="showTab('clientes')">👥 Clientes</button>
         <button class="tab" onclick="showTab('config')">Configuracion</button>
@@ -238,17 +239,17 @@
             </div>
           </div>
           <button onclick="exportOrdersToExcel()" style="padding:10px 16px; background:#27ae60; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📊 Exportar Pedidos</button>
-          <button onclick="descargarPedidosCSV()" style="padding:10px 16px; margin-left:8px; background:#2C1810; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📄 CSV Pedidos (servidor)</button>
-          <button onclick="descargarClientesCSV()" style="padding:10px 16px; margin-left:8px; background:#2C1810; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📄 CSV Clientes (servidor)</button>
+          <button onclick="descargarPedidosCSV()" style="padding:10px 16px; background:#8B5E3C; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📄 CSV Pedidos</button>
+          <button onclick="descargarClientesCSV()" style="padding:10px 16px; background:#8B5E3C; color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">📄 CSV Clientes</button>
         </div>
 
         <div class="filters" style="position:relative;">
           <div style="position:relative; flex:1; min-width:180px;">
-            <input type="text" id="search" placeholder="Buscar cliente, #, producto..." oninput="renderOrders()"
+            <input type="text" id="search" placeholder="Buscar cliente, #, producto..." oninput="filterOrders()"
               style="width:100%; box-sizing:border-box; padding-right:35px;">
-            <button onclick="document.getElementById('search').value='';renderOrders();" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:1rem; color:var(--text-muted); padding:4px;" title="Limpiar búsqueda">✕</button>
+            <button onclick="document.getElementById('search').value='';filterOrders();" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:1rem; color:var(--text-muted); padding:4px;" title="Limpiar búsqueda">✕</button>
           </div>
-          <select id="filter-status" onchange="renderOrders()">
+          <select id="filter-status" onchange="filterOrders()">
             <option value="">Estado: Todos</option>
             <option value="Pendiente">Pendiente</option>
             <option value="Esperando Pago">Esperando Pago</option>
@@ -258,19 +259,19 @@
             <option value="Entregado">Entregado</option>
             <option value="Cancelado">Cancelado</option>
           </select>
-          <select id="filter-entrega" onchange="renderOrders()">
+          <select id="filter-entrega" onchange="filterOrders()">
             <option value="">Entrega: Todas</option>
             <option value="pickup">Pasar a buscar</option>
             <option value="delivery">Delivery</option>
             <option value="envio">Envio</option>
           </select>
-          <select id="filter-year" onchange="updateDayFilter(); renderOrders();">
+          <select id="filter-year" onchange="updateDayFilter(); filterOrders();">
             <option value="">Ano</option>
           </select>
-          <select id="filter-month" onchange="updateDayFilter(); renderOrders();">
+          <select id="filter-month" onchange="updateDayFilter(); filterOrders();">
             <option value="">Mes</option>
           </select>
-          <select id="filter-day" onchange="renderOrders()">
+          <select id="filter-day" onchange="filterOrders()">
             <option value="">Dia</option>
           </select>
           <button onclick="clearFilters()"
@@ -335,6 +336,143 @@
           <button class="header-btn" onclick="openProductModal()" style="background: var(--accent);">+ Agregar</button>
         </div>
         <div class="products-grid" id="products-grid"></div>
+      </div>
+
+      <!-- ========== TAB: INVENTARIO ========== -->
+      <div id="tab-inventario" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">📦 Inventario</span>
+          <button class="help-btn" onclick="toggleHelp('inventario')">?</button>
+        </div>
+        <div id="help-inventario" class="help-panel">
+          <h4>📦 ¿Cómo usar Inventario?</h4>
+          <p>Controla el <strong>stock</strong> de tus productos.</p>
+          <ul>
+            <li><strong>Resumen:</strong> Ve el total de productos con stock, agotados y stock bajo</li>
+            <li><strong>Ajustar stock:</strong> Usa los botones + / - para entrada o salida de inventario</li>
+            <li><strong>Historial:</strong> Cada movimiento queda registrado con fecha, tipo y motivo</li>
+            <li><strong>Umbral mínimo:</strong> Define desde cuántas unidades considerás "stock bajo"</li>
+          </ul>
+          <div class="tip">💡 Tip: Los productos sin control de stock (stock vacío) no aparecen en alertas. Asignales un número para activar el control.</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px; margin-bottom:20px;" id="inv-summary">
+          <div class="stat-card" style="text-align:center;">
+            <div class="stat-value" id="inv-total">0</div>
+            <div class="stat-label">Total Productos</div>
+          </div>
+          <div class="stat-card" style="text-align:center; border-color:var(--success);">
+            <div class="stat-value" id="inv-con-stock" style="color:var(--success);">0</div>
+            <div class="stat-label">Con Stock</div>
+          </div>
+          <div class="stat-card" style="text-align:center; border-color:var(--warning);">
+            <div class="stat-value" id="inv-bajo" style="color:var(--warning);">0</div>
+            <div class="stat-label">Stock Bajo</div>
+          </div>
+          <div class="stat-card" style="text-align:center; border-color:var(--danger);">
+            <div class="stat-value" id="inv-agotados" style="color:var(--danger);">0</div>
+            <div class="stat-label">Agotados</div>
+          </div>
+          <div class="stat-card" style="text-align:center; border-color:var(--info);">
+            <div class="stat-value" id="inv-unidades" style="color:var(--info);">0</div>
+            <div class="stat-label">Unidades Totales</div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
+          <button onclick="openStockAdjustModal()" style="padding:10px 20px; background:var(--accent); color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer;">+ Ajustar Stock</button>
+          <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+            <label style="font-size:0.85rem; color:var(--text-muted);">Umbral mínimo:</label>
+            <input type="number" id="inv-threshold" min="1" max="100" value="5" style="width:60px; padding:6px; border:2px solid var(--warm); border-radius:6px; text-align:center;" onchange="saveInventoryThreshold(this.value)">
+            <label style="font-size:0.85rem; color:var(--text-muted);">unidades</label>
+          </div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; color:var(--text-muted); cursor:pointer;">
+            <input type="checkbox" id="inv-alerts-toggle" checked onchange="toggleInventoryAlerts(this.checked)">
+            Alertas activas
+          </label>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+          <select id="inv-filter-estado" onchange="renderInventario()" style="padding:8px; border-radius:8px; border:2px solid var(--warm);">
+            <option value="">Todos los estados</option>
+            <option value="agotado">Agotados</option>
+            <option value="bajo">Stock bajo</option>
+            <option value="ok">Stock suficiente</option>
+            <option value="sin-control">Sin control</option>
+          </select>
+          <input type="text" id="inv-search" placeholder="Buscar producto..." oninput="renderInventario()" style="flex:1; min-width:150px; padding:8px; border:2px solid var(--warm); border-radius:8px;">
+          <button onclick="document.getElementById('inv-search').value='';renderInventario();" style="padding:8px 12px; background:var(--warm); border:none; border-radius:8px; cursor:pointer;">Limpiar</button>
+        </div>
+
+        <div id="inventory-table-container" style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(44,24,16,0.06);">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr style="background:var(--cream);">
+                <th style="padding:12px 16px; text-align:left; font-size:0.85rem; color:var(--text-muted);">Producto</th>
+                <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Precio</th>
+                <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Stock</th>
+                <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Estado</th>
+                <th style="padding:12px 16px; text-align:right; font-size:0.85rem; color:var(--text-muted);">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="inv-tbody"></tbody>
+          </table>
+          <div id="inv-empty" style="display:none; padding:40px; text-align:center; color:var(--text-muted);">
+            No hay productos que coincidan con el filtro.
+          </div>
+        </div>
+
+        <div style="margin-top:24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3 style="font-family:'Playfair Display',serif; font-size:1.1rem; color:var(--primary);">Historial de Movimientos</h3>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select id="inv-mov-producto" onchange="renderMovements()" style="padding:6px; border-radius:8px; border:2px solid var(--warm); font-size:0.85rem;">
+                <option value="">Todos los productos</option>
+              </select>
+            </div>
+          </div>
+          <div id="movements-container" style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(44,24,16,0.06);">
+            <div id="movements-list" style="padding:16px; max-height:400px; overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== TAB: AJUSTE DE STOCK MODAL ========== -->
+      <div class="modal-overlay" id="stock-adjust-modal" style="display:none;">
+        <div class="modal" style="max-width:450px;">
+          <div class="modal-header">
+            <button class="modal-close" onclick="closeStockAdjustModal()">✕</button>
+            <h2>Ajustar Stock</h2>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Producto</label>
+              <select id="adjust-producto" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px;"></select>
+            </div>
+            <div class="form-group">
+              <label>Tipo de movimiento</label>
+              <select id="adjust-tipo" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px;">
+                <option value="entrada">Entrada (sumar stock)</option>
+                <option value="salida">Salida (restar stock)</option>
+                <option value="ajuste">Ajuste (fijar cantidad exacta)</option>
+                <option value="compra">Compra / Reabastecimiento</option>
+                <option value="devolucion">Devolución</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cantidad</label>
+              <input type="number" id="adjust-cantidad" min="1" value="1" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px;">
+            </div>
+            <div class="form-group">
+              <label>Motivo (opcional)</label>
+              <input type="text" id="adjust-motivo" placeholder="Ej: Reposición de ingredientes" style="width:100%; padding:10px; border:2px solid var(--warm); border-radius:8px;">
+            </div>
+            <div class="modal-actions">
+              <button class="btn-cancel" onclick="closeStockAdjustModal()">Cancelar</button>
+              <button class="btn-save" onclick="saveStockAdjust()">Guardar</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ========== TAB: PROMOCIONES ========== -->
@@ -442,6 +580,10 @@
                 <label style="font-size:0.75rem;">Cantidad mínima (uds)</label>
                 <input type="number" id="promo-cantidad" min="0" placeholder="Ej: 3">
               </div>
+            </div>
+            <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="promo-solo-cajas" style="width:18px;height:18px;">
+              <label for="promo-solo-cajas" style="margin:0;font-weight:600;font-size:0.85rem;cursor:pointer;">🎁 Solo aplicar a Cajas Personalizadas</label>
             </div>
           </div>
 
@@ -656,6 +798,44 @@
             </div>
           </div>
 
+          <!-- Sección: Cajas Personalizadas -->
+          <div style="background:white;padding:24px;border-radius:16px;box-shadow:var(--shadow-sm);">
+            <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">📦 Cajas Personalizadas</h3>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">Permite a tus clientes armar su propia caja seleccionando las galletas que quieran.</p>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid var(--warm);">
+              <span style="font-weight:600;">Habilitar Cajas Personalizadas</span>
+              <label class="switch">
+                <input type="checkbox" id="cfg-box-enabled" onchange="saveBoxConfig()">
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label>Tamaños disponibles</label>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
+                  <input type="checkbox" class="box-size-cb" value="6" onchange="saveBoxConfig()"> 6 galletas
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
+                  <input type="checkbox" class="box-size-cb" value="12" onchange="saveBoxConfig()"> 12 galletas
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
+                  <input type="checkbox" class="box-size-cb" value="24" onchange="saveBoxConfig()"> 24 galletas
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Productos excluidos (no pueden ir en cajas)</label>
+              <div id="box-excluded-products" style="display:flex;flex-direction:column;gap:6px;max-height:250px;overflow-y:auto;padding:10px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
+                <p style="color:#999;font-size:0.85rem;text-align:center;">Cargando productos...</p>
+              </div>
+            </div>
+
+            <button onclick="saveBoxConfig()" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:10px;font-weight:600;cursor:pointer;margin-top:8px;">💾 Guardar Configuración</button>
+          </div>
+
           <!-- Sección 5: Administradores -->
           <div style="background:white;padding:24px;border-radius:16px;box-shadow:var(--shadow-sm);">
             <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">👤 Administradores</h3>
@@ -835,7 +1015,7 @@
   </div>
 
   <div class="modal-overlay" id="edit-modal">
-    <div class="modal">
+    <div class="modal modal-wide">
       <div class="modal-header">
         <button class="modal-close" onclick="closeModal()">✕</button>
         <h2>Pedido #<span id="edit-num"></span></h2>
@@ -883,7 +1063,7 @@
   </div>
 
   <div class="modal-overlay" id="product-modal">
-    <div class="modal">
+    <div class="modal modal-lg">
       <div class="modal-header">
         <button class="modal-close" onclick="closeProductModal()">✕</button>
         <h2 id="product-modal-title">Nuevo Producto</h2>
@@ -891,26 +1071,72 @@
       <div class="modal-body">
         <input type="hidden" id="product-id">
         <input type="hidden" id="product-image">
-        <div id="product-image-preview" style="text-align:center;margin-bottom:16px;display:none;">
-          <img id="preview-img" src="" style="max-width:150px;max-height:150px;border-radius:12px;object-fit:cover;">
-          <button type="button" onclick="removeProductImage()"
-            style="display:block;margin:8px auto;background:var(--danger);color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;">Quitar
-            imagen</button>
-        </div>
+        <input type="hidden" id="product-box-config">
+
+        <!-- Tipo de producto — primero -->
         <div class="form-group">
-          <label>Imagen del producto</label>
-          <div style="border:2px dashed var(--warm);border-radius:8px;padding:16px;text-align:center;cursor:pointer;"
-            onclick="document.getElementById('product-image-input').click()">
-            <input type="file" id="product-image-input" accept="image/*" style="display:none;"
-              onchange="handleImageUpload(this)">
-            <div style="font-size:2rem;margin-bottom:8px;">📷</div>
-            <div style="color:var(--text-muted);font-size:0.85rem;">Click para subir imagen</div>
+          <label>Tipo de producto</label>
+          <div style="display:flex;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 20px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);transition:all 0.2s;">
+              <input type="radio" name="product-tipo" value="producto" checked onchange="toggleProductTipo()"> 🍪 Producto normal
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 20px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);transition:all 0.2s;">
+              <input type="radio" name="product-tipo" value="caja" onchange="toggleProductTipo()"> 🎁 Caja personalizable
+            </label>
           </div>
         </div>
-        <div class="form-group"><label>Nombre *</label><input type="text" id="product-name"></div>
-        <div class="form-group"><label>Precio (RD$) *</label><input type="number" id="product-price"></div>
-        <div class="form-group"><label>Descripcion</label><textarea id="product-desc" rows="3"></textarea></div>
-        <div class="form-group"><label>Stock (opcional — dejar vacío = sin control de inventario)</label><input type="number" id="product-stock" min="0" placeholder="Ej: 20"></div>
+
+        <!-- Información básica en grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group"><label>Nombre *</label><input type="text" id="product-name" placeholder="Ej: Galleta Chocolate Chip"></div>
+          <div class="form-group"><label>Precio (RD$) *</label><input type="number" id="product-price" placeholder="Ej: 120"></div>
+        </div>
+        <div class="form-group"><label>Descripción</label><textarea id="product-desc" rows="2" placeholder="Breve descripción del producto"></textarea></div>
+        <div class="form-group"><label>Stock <span style="font-weight:400;color:var(--text-muted);">(opcional — vacío = sin control de inventario)</span></label><input type="number" id="product-stock" min="0" placeholder="Ej: 20"></div>
+
+        <!-- Imagen -->
+        <div class="form-group">
+          <label>Imagen</label>
+          <div style="display:flex;gap:16px;align-items:center;">
+            <div id="product-image-preview" style="display:none;position:relative;">
+              <img id="preview-img" src="" style="width:80px;height:80px;border-radius:10px;object-fit:cover;border:2px solid var(--warm);">
+              <button type="button" onclick="removeProductImage()" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:white;border:none;font-size:0.8rem;cursor:pointer;line-height:1;">✕</button>
+            </div>
+            <div style="border:2px dashed var(--warm);border-radius:10px;padding:14px 20px;text-align:center;cursor:pointer;flex:1;"
+              onclick="document.getElementById('product-image-input').click()">
+              <input type="file" id="product-image-input" accept="image/*" style="display:none;" onchange="handleImageUpload(this)">
+              <span style="color:var(--text-muted);font-size:0.85rem;">📷 Click para subir imagen</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuración de caja (solo si tipo = caja) -->
+        <div id="box-config-fields" style="display:none;margin-top:16px;padding:20px;background:var(--cream);border-radius:12px;border:2px solid var(--warm);">
+          <div style="font-weight:700;margin-bottom:16px;color:var(--primary);font-size:1rem;">🎁 Configuración de Caja Personalizable</div>
+
+          <div class="form-group">
+            <label>Tamaños disponibles</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;background:white;border-radius:8px;border:2px solid var(--warm);">
+                <input type="checkbox" class="box-size-cb" value="6"> 6 galletas
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;background:white;border-radius:8px;border:2px solid var(--warm);">
+                <input type="checkbox" class="box-size-cb" value="12"> 12 galletas
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;background:white;border-radius:8px;border:2px solid var(--warm);">
+                <input type="checkbox" class="box-size-cb" value="24"> 24 galletas
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:12px;">
+            <label>Productos permitidos dentro de la caja <span style="font-weight:400;color:var(--text-muted);">(si no seleccionas ninguno, se mostrarán todos)</span></label>
+            <div id="box-allowed-products" style="display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;padding:10px;background:white;border-radius:8px;border:1px solid var(--warm);">
+              <p style="color:#999;font-size:0.85rem;text-align:center;">Cargando productos...</p>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-cancel" onclick="closeProductModal()">Cancelar</button>
           <button class="btn-save" onclick="saveProduct()">Guardar</button>

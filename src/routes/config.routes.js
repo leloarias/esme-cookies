@@ -9,6 +9,12 @@ router.get('/api/config', verifyToken, async (req, res) => {
   try {
     const config = await prepare('SELECT * FROM config WHERE id = 1').get() || { pickupAddress: '', deliveryPrice: 0, envioPrice: 0 };
     delete config.emailPass;
+    if (config.customBoxConfig && typeof config.customBoxConfig === 'string') {
+      try { config.customBoxConfig = JSON.parse(config.customBoxConfig); } catch (e) { config.customBoxConfig = null; }
+    }
+    if (!config.customBoxConfig || typeof config.customBoxConfig !== 'object') {
+      config.customBoxConfig = { enabled: true, sizes: [6, 12, 24], packagingPrice: 0, discountPct: 0, excludedProducts: [] };
+    }
     res.json(config);
   } catch (err) {
     res.status(500).json({ error: 'Error al leer config' });
@@ -95,6 +101,13 @@ router.post('/api/config', verifyToken, async (req, res) => {
     if (body.msgEntregado !== undefined) {
       await prepare('UPDATE config SET msgEntregado=? WHERE id=1').run(body.msgEntregado);
     }
+    if (body.customBoxConfig !== undefined) {
+      let value = body.customBoxConfig;
+      if (typeof value !== 'string') {
+        value = JSON.stringify(value);
+      }
+      await prepare('UPDATE config SET customBoxConfig=? WHERE id=1').run(value);
+    }
 
     const newIsOpen = body.isOpen !== undefined ? body.isOpen : wasOpen;
 
@@ -125,8 +138,20 @@ router.post('/api/config', verifyToken, async (req, res) => {
 
 router.get('/api/public-config', async (req, res) => {
   try {
-    const config = await prepare(`SELECT shopName, shopPhone, currency, primaryColor, accentColor, isOpen, pickupAddress, deliveryPrice, envioPrice, bankAccounts,
+    const config = await prepare(`SELECT shopName, shopPhone, currency, primaryColor, accentColor, isOpen, pickupAddress, deliveryPrice, envioPrice, bankAccounts, customBoxConfig,
       msgEsperandoPago, msgPagoConfirmado, msgPreparando, msgListo, msgEntregado FROM config WHERE id = 1`).get();
+    if (config) {
+      if (config.customBoxConfig) {
+        try {
+          config.customBoxConfig = JSON.parse(config.customBoxConfig);
+        } catch (e) {
+          config.customBoxConfig = null;
+        }
+      }
+      if (!config.customBoxConfig || typeof config.customBoxConfig !== 'object') {
+        config.customBoxConfig = { enabled: true, sizes: [6, 12, 24], packagingPrice: 0, discountPct: 0, excludedProducts: [] };
+      }
+    }
     if (config && config.bankAccounts) {
       try {
         let parsed = JSON.parse(config.bankAccounts);
