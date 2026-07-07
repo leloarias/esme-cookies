@@ -78,18 +78,23 @@ esme-cookies/
 ├── .env / .env.example      # Variables de entorno
 ├── package.json             # Dependencias y scripts
 ├── Iniciar-Servidor.bat     # Lanzador rápido en Windows
-└── server/
-    ├── server.js            # Servidor Express + rutas
-    ├── database.js          # Conexión Turso + esquema
-    ├── auth.js              # JWT (login admin)
-    ├── email.js             # Envío de emails
-    └── public/              # Frontend (index.html, admin.html)
+├── public/                  # Frontend (index.html, admin.html, css)
+├── scripts/                 # Utilidades de mantenimiento (reset-admin, etc.)
+└── src/                     # Código del backend
+    ├── server.js            # Arranque: HTTP + Socket.io + tareas periódicas
+    ├── app.js               # Configuración de Express (monta las rutas)
+    ├── config/              # Cloudinary
+    ├── db/                  # Conexión Turso + esquema
+    ├── middleware/          # auth (JWT), security (cabeceras)
+    ├── routes/              # Rutas de la API por dominio
+    ├── services/            # Lógica de negocio (promociones, clientes, email…)
+    └── utils/               # Helpers (teléfono, fecha, sanitización)
 ```
 
 ## Despliegue (servidor propio / OMV)
 
 En producción se usa [PM2](https://pm2.keymetrics.io):
 ```bash
-NODE_ENV=production pm2 start server/server.js --name esme-cookies
+NODE_ENV=production pm2 start src/server.js --name esme-cookies
 ```
 Recordá definir un `JWT_SECRET` fijo en el `.env` y `PORT=3001`.

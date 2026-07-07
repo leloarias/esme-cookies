@@ -1,6 +1,6 @@
 // Lógica de negocio de clientes reutilizada por las rutas de pedidos y clientes:
 // alta/actualización automática desde un pedido y recálculo de totales.
-const { prepare } = require('../database');
+const { prepare } = require('../db');
 const { normalizePhone } = require('../utils/helpers');
 
 // Crea o actualiza el cliente a partir de los datos de un pedido nuevo.

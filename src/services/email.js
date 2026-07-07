@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { prepare } = require('./database');
+const { prepare } = require('../db');
 
 function getTransporter(config) {
   return nodemailer.createTransport({

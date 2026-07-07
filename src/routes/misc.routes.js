@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
-const { verifyToken } = require('../auth');
-const { sendNewOrderEmail } = require('../email');
+const { verifyToken } = require('../middleware/auth');
+const { sendNewOrderEmail } = require('../services/email');
 
 const router = express.Router();
 
@@ -32,7 +32,7 @@ router.post('/api/test-email', verifyToken, async (req, res) => {
 });
 
 router.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
+  res.sendFile(path.join(__dirname, '..', '..', 'public', 'admin.html'));
 });
 
 module.exports = router;

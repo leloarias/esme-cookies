@@ -1,7 +1,7 @@
 // Generación de números de pedido. Mantiene un contador en memoria que se
 // inicializa al arrancar (con el MAX(numero) de la base) y garantiza que
 // cada nuevo pedido tenga un número único, con prefijo de fecha AAAAMMDD.
-const { prepare } = require('../database');
+const { prepare } = require('../db');
 
 let orderCounter = 0;
 

@@ -1,6 +1,6 @@
 const express = require('express');
-const { prepare } = require('../database');
-const { verifyToken } = require('../auth');
+const { prepare } = require('../db');
+const { verifyToken } = require('../middleware/auth');
 const { normalizePhone } = require('../utils/helpers');
 const { recalcularClientes } = require('../services/clients');
 

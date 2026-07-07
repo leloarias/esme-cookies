@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { prepare } = require('../database');
-const { generateToken } = require('../auth');
+const { prepare } = require('../db');
+const { generateToken } = require('../middleware/auth');
 const { sanitizeString } = require('../utils/helpers');
 
 const router = express.Router();

@@ -1,7 +1,7 @@
 const express = require('express');
-const { prepare } = require('../database');
-const { verifyToken } = require('../auth');
-const { sendNewOrderEmail } = require('../email');
+const { prepare } = require('../db');
+const { verifyToken } = require('../middleware/auth');
+const { sendNewOrderEmail } = require('../services/email');
 const { normalizePhone, sanitizeString, getDominicanDateTime } = require('../utils/helpers');
 const { filtrarPromocionesVigentes, evaluarPromociones } = require('../services/promotions');
 const { saveClientFromOrder, ensureClientExists } = require('../services/clients');

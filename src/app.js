@@ -15,12 +15,12 @@ app.use(securityHeaders);
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/images', express.static(path.join(__dirname, '..', 'public', 'images')));
 
 // Asegurar que existan las carpetas de imágenes/uploads
 ['images', 'uploads'].forEach(dir => {
-  const dirPath = path.join(__dirname, 'public', dir);
+  const dirPath = path.join(__dirname, '..', 'public', dir);
   if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 });
 

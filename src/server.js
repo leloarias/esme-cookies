@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 require('dotenv').config();
 
 const app = require('./app');
-const { initDatabase, prepare } = require('./database');
+const { initDatabase, prepare } = require('./db');
 const { setIO } = require('./services/realtime');
 const { setOrderCounter } = require('./services/orderNumber');
 const { getDominicanDateTime } = require('./utils/helpers');
