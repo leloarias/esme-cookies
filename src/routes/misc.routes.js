@@ -31,4 +31,8 @@ router.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '..', '..', 'public', 'admin.html'));
 });
 
+router.get('/seguimiento', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', '..', 'public', 'seguimiento.html'));
+});
+
 module.exports = router;

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguí tu pedido - Esme Cookies</title>
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍪</text></svg>">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2C1810;
+      --accent: #C9883A;
+      --cream: #FFF8E6;
+      --warm: #FEF9F3;
+      --border: #E8DCC8;
+      --success: #27ae60;
+      --danger: #c0392b;
+      --muted: #8B7355;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #FEFAE0 0%, #FAEDCD 100%);
+      color: var(--primary);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container { max-width: 640px; margin: 0 auto; }
+
+    .header { text-align: center; padding: 30px 0 20px; }
+    .header .emoji { font-size: 3rem; }
+    .header h1 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-top: 6px; }
+    .header p { color: var(--muted); margin-top: 6px; }
+
+    .search-box {
+      background: #fff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 8px 30px rgba(44, 24, 16, 0.08); margin-bottom: 24px;
+    }
+    .search-box label { font-weight: 600; display: block; margin-bottom: 8px; }
+    .search-row { display: flex; gap: 10px; }
+    .search-row input {
+      flex: 1; padding: 14px; border: 2px solid var(--border); border-radius: 10px;
+      font-size: 1rem; outline: none;
+    }
+    .search-row input:focus { border-color: var(--accent); }
+    .search-row button {
+      padding: 14px 24px; background: var(--primary); color: #fff; border: none;
+      border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 1rem;
+    }
+    .search-row button:disabled { opacity: 0.6; cursor: default; }
+
+    .order-card {
+      background: #fff; border-radius: 16px; padding: 22px; margin-bottom: 18px;
+      box-shadow: 0 8px 30px rgba(44, 24, 16, 0.08);
+    }
+    .order-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .order-num { font-size: 1.3rem; font-weight: 700; }
+    .order-date { color: var(--muted); font-size: 0.9rem; }
+    .badge { padding: 5px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; color: #fff; }
+
+    .order-products {
+      background: var(--warm); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; margin: 16px 0; line-height: 1.7;
+    }
+    .order-total { text-align: right; font-size: 1.2rem; font-weight: 700; }
+    .order-total span { color: var(--accent); }
+
+    .timeline { margin-top: 20px; }
+    .step { display: flex; gap: 14px; position: relative; padding-bottom: 22px; }
+    .step:last-child { padding-bottom: 0; }
+    .step .dot {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+      background: #eee; color: #aaa; z-index: 1;
+    }
+    .step.done .dot { background: var(--success); color: #fff; }
+    .step.current .dot { background: var(--accent); color: #fff; box-shadow: 0 0 0 5px rgba(201, 136, 58, 0.2); }
+    .step::before {
+      content: ''; position: absolute; left: 19px; top: 40px; bottom: 0; width: 2px; background: #eee;
+    }
+    .step:last-child::before { display: none; }
+    .step.done::before { background: var(--success); }
+    .step .info { padding-top: 8px; }
+    .step .info .name { font-weight: 600; }
+    .step.pending-step .info .name { color: #aaa; }
+    .step .info .time { font-size: 0.82rem; color: var(--muted); }
+
+    .cancel-banner {
+      background: #fdecea; color: var(--danger); border: 1px solid #f5c6cb;
+      border-radius: 12px; padding: 16px; text-align: center; font-weight: 700; margin-top: 16px;
+    }
+
+    .msg { text-align: center; color: var(--muted); padding: 30px 10px; }
+    .footer { text-align: center; padding: 24px; }
+    .footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">🍪</div>
+      <h1>Seguí tu pedido</h1>
+      <p>Ingresá tu número de WhatsApp para ver el estado</p>
+    </div>
+
+    <div class="search-box">
+      <label for="tel">Tu número de WhatsApp</label>
+      <div class="search-row">
+        <input type="tel" id="tel" placeholder="Ej: 8291234567" inputmode="numeric">
+        <button id="btn" onclick="buscar()">Buscar</button>
+      </div>
+    </div>
+
+    <div id="resultado"></div>
+
+    <div class="footer">
+      <a href="/">← Volver a la tienda</a>
+    </div>
+  </div>
+
+  <script>
+    var FLOW = [
+      { key: 'Pendiente', label: 'Pedido recibido', icon: '📝' },
+      { key: 'Confirmado', label: 'Pago confirmado', icon: '✅' },
+      { key: 'Preparando', label: 'Preparando', icon: '👨‍🍳' },
+      { key: 'Listo', label: 'Listo', icon: '📦' },
+      { key: 'Entregado', label: 'Entregado', icon: '🎉' }
+    ];
+    var BADGE_COLORS = {
+      Pendiente: '#f39c12', Confirmado: '#3498db', Preparando: '#9b59b6',
+      Listo: '#27ae60', Entregado: '#27ae60', Cancelado: '#c0392b', 'Esperando Pago': '#f39c12'
+    };
+
+    function fmt(iso) {
+      if (!iso) return '';
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('es-DO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderTimeline(estado, ts) {
+      if (estado === 'Cancelado') {
+        return '<div class="cancel-banner">❌ Este pedido fue cancelado' +
+          (ts['Cancelado'] ? ' (' + fmt(ts['Cancelado']) + ')' : '') + '</div>';
+      }
+      var currentIdx = FLOW.findIndex(function (s) { return s.key === estado; });
+      if (currentIdx < 0) currentIdx = 0;
+      var html = '<div class="timeline">';
+      FLOW.forEach(function (step, i) {
+        var cls = i < currentIdx ? 'done' : (i === currentIdx ? 'current' : 'pending-step');
+        var time = ts[step.key] ? '<div class="time">' + fmt(ts[step.key]) + '</div>' : '';
+        html += '<div class="step ' + cls + '">' +
+          '<div class="dot">' + step.icon + '</div>' +
+          '<div class="info"><div class="name">' + step.label + '</div>' + time + '</div>' +
+          '</div>';
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function renderOrder(o) {
+      var badgeColor = BADGE_COLORS[o.estado] || '#8B7355';
+      var productos = (o.productos || '').split(',').map(function (p) { return p.trim(); }).filter(Boolean).join('<br>');
+      return '<div class="order-card">' +
+        '<div class="order-top">' +
+        '<div><div class="order-num">Pedido #' + String(o.numero).padStart(4, '0') + '</div>' +
+        '<div class="order-date">' + (o.fecha || '') + '</div></div>' +
+        '<span class="badge" style="background:' + badgeColor + '">' + o.estado + '</span>' +
+        '</div>' +
+        '<div class="order-products">' + productos + '</div>' +
+        '<div class="order-total">Total: <span>RD$ ' + Number(o.total || 0).toLocaleString() + '</span></div>' +
+        renderTimeline(o.estado, o.estado_timestamps || {}) +
+        '</div>';
+    }
+
+    async function buscar() {
+      var tel = document.getElementById('tel').value.replace(/\D/g, '');
+      var cont = document.getElementById('resultado');
+      var btn = document.getElementById('btn');
+      if (tel.length < 10) {
+        cont.innerHTML = '<div class="msg">Ingresá un número válido (10 dígitos).</div>';
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Buscando...';
+      try {
+        var res = await fetch('/api/seguimiento/' + tel);
+        var data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          cont.innerHTML = '<div class="msg">No encontramos pedidos con ese número.<br>Revisá que sea el mismo que usaste al ordenar.</div>';
+        } else {
+          cont.innerHTML = data.map(renderOrder).join('');
+        }
+      } catch (e) {
+        cont.innerHTML = '<div class="msg">Hubo un error. Intentá de nuevo en un momento.</div>';
+      }
+      btn.disabled = false; btn.textContent = 'Buscar';
+    }
+
+    document.getElementById('tel').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') buscar();
+    });
+
+    // Permitir precargar con ?tel=... (ej. desde el link del email)
+    var params = new URLSearchParams(location.search);
+    if (params.get('tel')) {
+      document.getElementById('tel').value = params.get('tel');
+      buscar();
+    }
+  </script>
+</body>
+
+</html>

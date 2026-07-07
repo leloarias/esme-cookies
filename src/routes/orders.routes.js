@@ -312,4 +312,34 @@ router.delete('/api/orders/:num', verifyToken, async (req, res) => {
   }
 });
 
+// Seguimiento público de pedidos por teléfono (campos limitados, sin dirección).
+// Tolerante al formato del número: compara por teléfono normalizado.
+router.get('/api/seguimiento/:telefono', async (req, res) => {
+  try {
+    const tel = normalizePhone(req.params.telefono);
+    if (!tel || tel.length < 10) return res.json([]);
+    const all = await prepare(
+      'SELECT numero, fecha, cliente, estado, productos, total, tipo_entrega, estado_timestamps, telefono FROM pedidos ORDER BY id DESC'
+    ).all();
+    const orders = all.filter(o => normalizePhone(o.telefono) === tel).map(o => {
+      let timestamps = {};
+      try { timestamps = JSON.parse(o.estado_timestamps); } catch (e) {}
+      return {
+        numero: o.numero,
+        fecha: o.fecha,
+        cliente: o.cliente,
+        estado: o.estado,
+        productos: o.productos,
+        total: o.total,
+        tipo_entrega: o.tipo_entrega,
+        estado_timestamps: timestamps
+      };
+    });
+    res.json(orders);
+  } catch (err) {
+    console.error('Error en seguimiento:', err);
+    res.status(500).json({ error: 'Error al obtener seguimiento' });
+  }
+});
+
 module.exports = router;

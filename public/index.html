@@ -735,6 +735,7 @@
       <p>Te contactaremos pronto por WhatsApp</p>
       <div id="cupos-disponibles" style="margin:15px 0;padding:12px;background:var(--warm);border-radius:10px;font-size:0.85rem;"></div>
       <div id="bank-accounts-display" style="margin:15px auto;max-width:400px;padding:15px;background:#E8F5E9;border-radius:12px;border:2px solid var(--success);text-align:left;"></div>
+      <a id="track-link" href="/seguimiento" style="display:inline-block; margin:8px; padding:14px 24px; background:var(--primary); color:#fff; border-radius:12px; text-decoration:none; font-weight:700;">📍 Seguí tu pedido</a>
       <button class="new-order-btn" onclick="newOrder()">+ Hacer otro pedido</button>
     </div>
   </div>
@@ -1249,6 +1250,7 @@
         const data = await res.json();
         if (data.success) {
           document.getElementById('order-number').textContent = String(data.numero).padStart(4, '0');
+          document.getElementById('track-link').href = '/seguimiento?tel=' + encodeURIComponent((telefono || '').replace(/\D/g, ''));
           document.getElementById('order-form').style.display = 'none';
           document.getElementById('success-screen').classList.add('show');
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1333,6 +1335,7 @@
       cart = {};
       document.getElementById('cliente').value = '';
       document.getElementById('telefono').value = '';
+      document.getElementById('email').value = '';
       document.getElementById('direccion').value = '';
       document.getElementById('sector').value = '';
       document.getElementById('observaciones').value = '';
