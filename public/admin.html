@@ -1240,8 +1240,12 @@
             <h3 class="chart-title">Menos Vendidos</h3>
             <div class="bar-chart" id="worst-products-chart" style="margin-top: 10px;"></div>
           </div>
+          <div class="chart-card">
+            <h3 class="chart-title">📦 Inventario</h3>
+            <div id="inventory-alerts" style="margin-top: 10px;"></div>
+          </div>
         </div>
-        
+
         <!-- REPORTE CONTABLE PROFESIONAL -->
         <div style="margin-top:24px;">
           <div class="chart-card" style="padding:24px;">
@@ -3470,7 +3474,35 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         });
       }
       if (document.getElementById('promos-usage-list')) document.getElementById('promos-usage-list').innerHTML = promosHtml;
-      
+
+      // Alertas de inventario (usa el stock actual de los productos, no el filtro de fecha)
+      var invEl = document.getElementById('inventory-alerts');
+      if (invEl) {
+        var conStock = products.filter(function (p) { return p.stock !== null && p.stock !== undefined; });
+        var agotados = conStock.filter(function (p) { return p.stock <= 0; });
+        var bajos = conStock.filter(function (p) { return p.stock > 0 && p.stock <= 5; });
+        var invHtml = '';
+        if (conStock.length === 0) {
+          invHtml = '<p style="color:var(--text-muted);">Ningún producto tiene control de stock. Asigná un stock a un producto en la pestaña Productos para verlo acá.</p>';
+        } else {
+          invHtml += '<div style="display:flex; gap:10px; margin-bottom:14px;">';
+          invHtml += '<div style="flex:1; text-align:center; background:#fdecea; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:#c0392b;">' + agotados.length + '</div><div style="font-size:0.8rem; color:#c0392b;">Agotados</div></div>';
+          invHtml += '<div style="flex:1; text-align:center; background:#fef5e7; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:#e67e22;">' + bajos.length + '</div><div style="font-size:0.8rem; color:#e67e22;">Stock bajo</div></div>';
+          invHtml += '</div>';
+          var alertList = agotados.concat(bajos);
+          if (alertList.length === 0) {
+            invHtml += '<p style="color:var(--success); font-weight:600;">✅ Todos los productos con control tienen stock suficiente.</p>';
+          } else {
+            alertList.forEach(function (p) {
+              var color = p.stock <= 0 ? '#c0392b' : '#e67e22';
+              var etiqueta = p.stock <= 0 ? '⛔ Agotado' : (p.stock + ' u.');
+              invHtml += '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--warm);"><span>' + p.nombre + '</span><span style="font-weight:700; color:' + color + ';">' + etiqueta + '</span></div>';
+            });
+          }
+        }
+        invEl.innerHTML = invHtml;
+      }
+
       // Generar Reporte Contable
       renderAccountingReport(dashOrders);
     }
