@@ -339,7 +339,7 @@
           var isInactive = c.activo == 0;
           var cardStyle = isInactive ? 'background:#f5f5f5;opacity:0.7;' : 'background:linear-gradient(135deg, #fff, var(--cream));';
           var descuentos = c.total_descuentos || 0;
-          html += '<div style="' + cardStyle + 'padding:20px;border-radius:16px;cursor:pointer;transition:all 0.2s;transform:translateY(0);box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid var(--warm);" onmouseover="this.style.transform=\'translateY(-4px)\';this.style.boxShadow=\'0 8px 20px rgba(0,0,0,0.15)\'" onmouseout="this.style.transform=\'translateY(0)\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.08)\'">'
+          html += '<div onclick="verClienteDetalle(' + c.id + ')" style="' + cardStyle + 'padding:20px;border-radius:16px;cursor:pointer;transition:all 0.2s;transform:translateY(0);box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid var(--warm);" onmouseover="this.style.transform=\'translateY(-4px)\';this.style.boxShadow=\'0 8px 20px rgba(0,0,0,0.15)\'" onmouseout="this.style.transform=\'translateY(0)\';this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.08)\'">'
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
                 + '<div style="display:flex;align-items:center;gap:10px;">'
                 + '<div style="width:45px;height:45px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:1.2rem;">' + (c.nombre ? c.nombre.charAt(0).toUpperCase() : '?') + '</div>'
@@ -391,6 +391,55 @@
       renderClientes(filtered);
     }
     
+    // Modal de detalles del cliente (vista completa al hacer click en la tarjeta)
+    async function verClienteDetalle(id) {
+      try {
+        var res = await apiFetch(API_URL + '/api/clientes/' + id);
+        if (!res.ok) { showToast('Error al cargar cliente', 'error'); return; }
+        var c = await res.json();
+
+        document.getElementById('detalle-cliente-nombre').textContent = c.nombre || 'Sin nombre';
+
+        var row = function (label, val) {
+          return '<div style="display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--warm);"><span style="color:var(--text-muted);">' + label + '</span><span style="font-weight:600; text-align:right; word-break:break-word;">' + (val || '—') + '</span></div>';
+        };
+        var stat = function (val, label, color) {
+          return '<div style="background:white; border-radius:12px; padding:14px; text-align:center;"><div style="font-size:1.3rem; font-weight:700; color:' + (color || 'var(--primary)') + ';">' + val + '</div><div style="font-size:0.76rem; color:var(--text-muted);">' + label + '</div></div>';
+        };
+        var estadoBadge = (c.activo == 0)
+          ? '<span style="background:#fdecea;color:#c0392b;padding:4px 12px;border-radius:20px;font-weight:700;font-size:0.8rem;">Inactivo</span>'
+          : '<span style="background:#eafaf1;color:#27ae60;padding:4px 12px;border-radius:20px;font-weight:700;font-size:0.8rem;">Activo</span>';
+
+        var html = '<div style="text-align:right; margin-bottom:10px;">' + estadoBadge + '</div>';
+        html += '<div style="background:white; border-radius:12px; padding:4px 16px; margin-bottom:16px;">';
+        html += row('📱 Teléfono', c.telefono);
+        html += row('📧 Email', c.email);
+        html += row('📍 Dirección', c.direccion);
+        html += row('🏘️ Sector', c.sector);
+        html += row('📝 Notas', c.notas);
+        html += '</div>';
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">';
+        html += stat(c.total_pedidos || 0, 'Pedidos');
+        html += stat('RD$ ' + (c.total_gastado || 0).toLocaleString(), 'Total gastado', 'var(--success)');
+        html += stat('RD$ ' + (c.total_descuentos || 0).toLocaleString(), 'Descuentos', '#e74c3c');
+        html += stat(c.ultimo_pedido || '—', 'Último pedido');
+        html += '</div>';
+        document.getElementById('detalle-cliente-content').innerHTML = html;
+
+        document.getElementById('detalle-btn-editar').onclick = function () {
+          document.getElementById('cliente-detalle-modal').style.display = 'none';
+          editCliente(id);
+        };
+        document.getElementById('detalle-btn-historial').onclick = function () {
+          document.getElementById('cliente-detalle-modal').style.display = 'none';
+          showClientHistory(id);
+        };
+        document.getElementById('cliente-detalle-modal').style.display = 'flex';
+      } catch (err) {
+        showToast('Error de conexión', 'error');
+      }
+    }
+
     async function editCliente(id) {
       try {
         var res = await apiFetch(API_URL + '/api/clientes/' + id);
@@ -2065,6 +2114,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('edit-cliente').value = editingOrder.cliente || '';
       document.getElementById('edit-telefono').value = editingOrder.telefono || '';
       document.getElementById('edit-productos').value = editingOrder.productos || '';
+      document.getElementById('edit-envio').value = editingOrder.envio || 0;
       document.getElementById('edit-total').value = editingOrder.total || 0;
       document.getElementById('edit-estado').value = editingOrder.estado || 'Pendiente';
 
@@ -2089,6 +2139,15 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('edit-modal-form').style.display = 'none';
     }
 
+    // Recalcula el total al cambiar el envío: total = subtotal - descuento + envío
+    function recalcEditTotal() {
+      if (!editingOrder) return;
+      var envio = parseFloat(document.getElementById('edit-envio').value) || 0;
+      var subtotal = parseFloat(editingOrder.subtotal) || 0;
+      var descuento = parseFloat(editingOrder.descuento) || 0;
+      document.getElementById('edit-total').value = Math.max(0, subtotal - descuento + envio);
+    }
+
     async function saveOrder() {
       if (!editingOrder) { 
         showToast('No hay pedido para guardar', 'error'); 
@@ -2099,6 +2158,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         cliente: document.getElementById('edit-cliente').value.trim(),
         telefono: document.getElementById('edit-telefono').value.trim(),
         productos: document.getElementById('edit-productos').value.trim(),
+        envio: parseFloat(document.getElementById('edit-envio').value) || 0,
         total: parseFloat(document.getElementById('edit-total').value) || 0,
         estado: document.getElementById('edit-estado').value,
         estado_timestamp: new Date().toISOString()

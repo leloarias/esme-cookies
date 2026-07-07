@@ -980,6 +980,22 @@
     </div>
   </div>
 
+  <!-- MODAL: DETALLES DEL CLIENTE -->
+  <div class="modal-overlay" id="cliente-detalle-modal" style="display:none; background:rgba(0,0,0,0.6);">
+    <div style="background:white; border-radius:16px; max-width:520px; width:95%; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+      <div style="padding:20px 24px; background:linear-gradient(135deg, var(--primary), #4a2c20); color:white; display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; font-family:'Playfair Display',serif; font-size:1.3rem;" id="detalle-cliente-nombre">Cliente</h3>
+        <button onclick="document.getElementById('cliente-detalle-modal').style.display='none'" style="background:rgba(255,255,255,0.2); border:none; color:white; font-size:1.2rem; cursor:pointer; width:36px; height:36px; border-radius:50%;">✕</button>
+      </div>
+      <div style="padding:20px; overflow-y:auto; flex:1; background:var(--cream);" id="detalle-cliente-content"></div>
+      <div style="padding:16px; border-top:1px solid var(--warm); display:flex; gap:10px; justify-content:center; flex-wrap:wrap; background:white;">
+        <button id="detalle-btn-editar" style="padding:10px 20px; background:var(--info); color:#fff; border:none; border-radius:10px; cursor:pointer; font-weight:600;">✏️ Editar</button>
+        <button id="detalle-btn-historial" style="padding:10px 20px; background:var(--primary); color:#fff; border:none; border-radius:10px; cursor:pointer; font-weight:600;">📋 Historial</button>
+        <button onclick="document.getElementById('cliente-detalle-modal').style.display='none'" style="padding:10px 20px; background:#5D4037; color:#fff; border:none; border-radius:10px; cursor:pointer; font-weight:600;">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: EDITAR CLIENTE -->
   <div class="modal-overlay" id="edit-cliente-modal" style="display:none; background:rgba(0,0,0,0.6); justify-content:center; align-items:center;">
     <div style="background:white; border-radius:16px; max-width:450px; width:92%; max-height:90vh; overflow-y:auto; padding:24px; margin:10px;">
@@ -1042,6 +1058,7 @@
         <div class="form-group"><label>Productos</label><textarea id="edit-productos" rows="4"
             style="width:100%;padding:10px;border:2px solid var(--warm);border-radius:8px;resize:vertical;font-family:inherit;"></textarea>
         </div>
+        <div class="form-group"><label>Envío (RD$) — personalizable por pedido</label><input type="number" id="edit-envio" oninput="recalcEditTotal()"></div>
         <div class="form-group"><label>Total (RD$)</label><input type="number" id="edit-total"></div>
         <div class="form-group"><label>Estado</label>
           <select id="edit-estado">
