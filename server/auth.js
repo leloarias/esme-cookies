@@ -1,11 +1,22 @@
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 
-// Generar clave secreta segura
-const JWT_SECRET = process.env.JWT_SECRET || 
-  (process.env.NODE_ENV === 'production' 
-    ? crypto.randomBytes(64).toString('hex')
-    : 'super_secret_esme_cookies_key_123');
+// Clave secreta para firmar los tokens.
+// IMPORTANTE: debe ser un valor FIJO (definido en .env). Antes se generaba
+// aleatoriamente en producción, lo que invalidaba todas las sesiones admin
+// en cada reinicio del servidor (PM2).
+let JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[FATAL] Falta JWT_SECRET en el entorno (.env). Definí un valor ' +
+      'fijo y secreto antes de arrancar en producción.\n' +
+      '  Generalo con: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+    process.exit(1);
+  }
+  // Solo desarrollo local: valor estable (no aleatorio) para no cerrar sesión al reiniciar.
+  console.warn('[auth] JWT_SECRET no definido: usando clave de DESARROLLO. No usar en producción.');
+  JWT_SECRET = 'dev_only_esme_cookies_insecure_key';
+}
 
 // Configuración de algoritmo y expires
 const JWT_OPTIONS = {

@@ -66,7 +66,7 @@ async function sendNewOrderEmail(orderData) {
             </div>
           </div>
           <div style="background:#F5EDE4;padding:28px 20px;text-align:center;">
-            <a href="${process.env.RENDER_URL || 'https://esme-cookies.onrender.com'}/admin" style="display:inline-block;background:#2C1810;color:white;padding:16px 32px;border-radius:10px;text-decoration:none;font-weight:700;">Ver Panel de Admin →</a>
+            <a href="${process.env.APP_URL || 'http://localhost:3001'}/admin" style="display:inline-block;background:#2C1810;color:white;padding:16px 32px;border-radius:10px;text-decoration:none;font-weight:700;">Ver Panel de Admin →</a>
           </div>
         </div>
       </body></html>`;
