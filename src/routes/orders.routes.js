@@ -5,6 +5,7 @@ const { sendNewOrderEmail, sendCustomerConfirmationEmail, sendStatusChangeEmail 
 const { normalizePhone, sanitizeString, getDominicanDateTime } = require('../utils/helpers');
 const { filtrarPromocionesVigentes, evaluarPromociones } = require('../services/promotions');
 const { saveClientFromOrder, ensureClientExists } = require('../services/clients');
+const { checkStock, decrementStock } = require('../services/inventory');
 const { nextOrderNumber } = require('../services/orderNumber');
 const { getIO } = require('../services/realtime');
 
@@ -106,6 +107,12 @@ router.post('/api/orders', async (req, res) => {
   const cartItemsArr = req.body.cartItems || [];
   console.log(`[Order Debug] cartItemsArr length: ${cartItemsArr.length}`);
 
+  // Control de inventario: rechazar el pedido si algún producto no tiene stock suficiente.
+  const stockCheck = await checkStock(cartItemsArr);
+  if (!stockCheck.ok) {
+    return res.status(409).json({ error: stockCheck.error });
+  }
+
   const { descuentoTotal, envioDescuento, promosAplicadas } = evaluarPromociones(promosActivas, {
     subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr
   });
@@ -156,6 +163,9 @@ router.post('/api/orders', async (req, res) => {
     for (const p of promosAplicadas) {
       await prepare("UPDATE promociones SET usos_actuales = usos_actuales + 1 WHERE id = ?").run(p.id);
     }
+
+    // Descontar inventario de los productos con control de stock.
+    await decrementStock(cartItemsArr);
 
     res.json({
       success: true,

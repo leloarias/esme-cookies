@@ -6,7 +6,7 @@ panel de administración, pedidos en tiempo real, promociones, clientes y emails
 ## Tecnología
 
 - **Backend:** Node.js + Express
-- **Base de datos:** [Turso](https://turso.tech) (libsql, en la nube)
+- **Base de datos:** libsql/SQLite (archivo local por defecto; opcionalmente remoto)
 - **Tiempo real:** Socket.io
 - **Imágenes:** Cloudinary
 - **Emails:** Nodemailer (SMTP configurable desde el panel)
@@ -15,8 +15,11 @@ panel de administración, pedidos en tiempo real, promociones, clientes y emails
 ## Requisitos
 
 - Node.js 18 o superior
-- Una base de datos Turso (URL + token)
 - (Opcional) Cuenta de Cloudinary para imágenes de productos
+
+> **Sistema independiente:** por defecto la base de datos es un archivo local
+> (`data/esme.db`), no necesita ninguna nube. Opcionalmente puede apuntar a una
+> base remota con `DATABASE_URL`.
 
 ## Instalación
 
@@ -25,17 +28,22 @@ panel de administración, pedidos en tiempo real, promociones, clientes y emails
    npm install
    ```
 
-2. Copiá `.env.example` a `.env` y completá los valores reales:
+2. Copiá `.env.example` a `.env`:
    ```bash
    cp .env.example .env
    ```
-   Como mínimo necesitás `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` y un `JWT_SECRET`.
-   Para generar un `JWT_SECRET`:
+   Para uso local no hace falta cambiar nada (ya viene con la base local).
+   Para producción, generá un `JWT_SECRET` fijo:
    ```bash
    node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
    ```
 
-3. Arrancá el servidor:
+3. (Opcional) Cargá datos de ejemplo para ver la app funcionando:
+   ```bash
+   npm run seed
+   ```
+
+4. Arrancá el servidor:
    ```bash
    npm start
    ```
@@ -60,8 +68,8 @@ Ver `.env.example` para la lista completa. Las principales:
 
 | Variable              | Descripción                                             |
 |-----------------------|---------------------------------------------------------|
-| `TURSO_DATABASE_URL`  | URL de la base de datos Turso                           |
-| `TURSO_AUTH_TOKEN`    | Token de acceso a Turso                                 |
+| `DATABASE_URL`        | Base de datos. Local por defecto (`file:data/esme.db`)  |
+| `DATABASE_AUTH_TOKEN` | Token, solo si usás una base remota                     |
 | `JWT_SECRET`          | Clave fija para firmar sesiones (obligatoria en prod)   |
 | `PORT`                | Puerto del servidor (por defecto 3001)                  |
 | `NODE_ENV`            | `development` o `production`                             |
@@ -84,7 +92,7 @@ esme-cookies/
     ├── server.js            # Arranque: HTTP + Socket.io + tareas periódicas
     ├── app.js               # Configuración de Express (monta las rutas)
     ├── config/              # Cloudinary
-    ├── db/                  # Conexión Turso + esquema
+    ├── db/                  # Conexión a la base + esquema + migraciones
     ├── middleware/          # auth (JWT), security (cabeceras)
     ├── routes/              # Rutas de la API por dominio
     ├── services/            # Lógica de negocio (promociones, clientes, email…)

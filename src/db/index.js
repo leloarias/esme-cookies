@@ -3,8 +3,21 @@ const { createClient } = require('@libsql/client');
 let db = null;
 
 async function initDatabase() {
-  const url = process.env.TURSO_DATABASE_URL || 'file:local.db';
-  const authToken = process.env.TURSO_AUTH_TOKEN || '';
+  // Base de datos independiente: por defecto un archivo local (libsql/SQLite).
+  // Opcionalmente puede apuntar a una base remota definiendo DATABASE_URL
+  // (o TURSO_DATABASE_URL, por compatibilidad).
+  const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || 'file:data/esme.db';
+  const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '';
+
+  // Si la base es un archivo local dentro de una subcarpeta, asegurar que exista.
+  if (url.startsWith('file:')) {
+    const path = require('path');
+    const fs = require('fs');
+    const dir = path.dirname(url.slice('file:'.length));
+    if (dir && dir !== '.' && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
 
   db = createClient({
     url,
@@ -49,7 +62,8 @@ async function initDatabase() {
       nombre TEXT NOT NULL,
       precio REAL NOT NULL,
       descripcion TEXT,
-      imagen TEXT
+      imagen TEXT,
+      stock INTEGER
     )
   `);
 
@@ -137,6 +151,9 @@ async function initDatabase() {
     )
   `);
 
+  // Migraciones para bases de datos ya existentes (columnas agregadas después).
+  await ensureColumn('productos', 'stock', 'INTEGER');
+
   // Inicializar config si está vacía
   const configCount = await db.execute('SELECT COUNT(*) as count FROM config');
   if (Number(configCount.rows[0].count) === 0) {
@@ -187,6 +204,16 @@ function prepare(sql) {
 
 async function exec(sql) {
   await db.execute(sql);
+}
+
+// Agrega una columna a una tabla si todavía no existe (migración idempotente).
+async function ensureColumn(table, column, definition) {
+  const info = await db.execute(`PRAGMA table_info(${table})`);
+  const exists = info.rows.some(r => r.name === column);
+  if (!exists) {
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[DB] Migración: columna ${table}.${column} agregada`);
+  }
 }
 
 module.exports = {

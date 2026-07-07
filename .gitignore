@@ -7,3 +7,4 @@ esme_cookies.db
 public/uploads/
 *.log
 .DS_Store
+.claude/settings.local.json

@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "seed": "node scripts/seed.js",
     "reset-admin": "node scripts/reset-admin.js"
   },
   "dependencies": {

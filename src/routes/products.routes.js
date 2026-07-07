@@ -4,6 +4,13 @@ const { verifyToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Normaliza el valor de stock: vacío/ausente => null (sin control de inventario).
+function parseStock(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = parseInt(v);
+  return isNaN(n) ? null : Math.max(0, n);
+}
+
 router.get('/api/products', async (req, res) => {
   try {
     const products = await prepare('SELECT * FROM productos').all();
@@ -14,11 +21,11 @@ router.get('/api/products', async (req, res) => {
 });
 
 router.post('/api/products', verifyToken, async (req, res) => {
-  const { nombre, precio, descripcion, imagen } = req.body;
+  const { nombre, precio, descripcion, imagen, stock } = req.body;
   if (!nombre || !precio) return res.status(400).json({ error: 'Faltan datos' });
   try {
-    const info = await prepare('INSERT INTO productos (nombre, precio, descripcion, imagen) VALUES (?, ?, ?, ?)')
-      .run(nombre, precio, descripcion || '', imagen || '');
+    const info = await prepare('INSERT INTO productos (nombre, precio, descripcion, imagen, stock) VALUES (?, ?, ?, ?, ?)')
+      .run(nombre, precio, descripcion || '', imagen || '', parseStock(stock));
     res.json({ success: true, id: info.lastInsertRowid });
   } catch (err) {
     res.status(500).json({ error: 'Error al guardar producto' });
@@ -32,8 +39,11 @@ router.put('/api/products/:id', verifyToken, async (req, res) => {
     const current = await prepare('SELECT * FROM productos WHERE id = ?').get(id);
     if (!current) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    await prepare('UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ? WHERE id = ?')
-      .run(nombre || current.nombre, precio || current.precio, descripcion || '', imagen || '', id);
+    // Si viene 'stock' en el body se actualiza (vacío = sin control); si no, se conserva.
+    const stockVal = ('stock' in req.body) ? parseStock(req.body.stock) : current.stock;
+
+    await prepare('UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ?, stock = ? WHERE id = ?')
+      .run(nombre || current.nombre, precio || current.precio, descripcion || '', imagen || '', stockVal, id);
     res.json({ success: true });
   } catch (err) {
     console.error('Error actualizando producto:', err);

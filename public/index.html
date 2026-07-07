@@ -1073,18 +1073,26 @@
           imageContent = `<div class="product-img-emoji">🍪</div>`;
         }
         
+        const stockNum = (p.stock === null || p.stock === undefined) ? null : p.stock;
+        const agotado = stockNum !== null && stockNum <= 0;
+        const lowNote = (!agotado && stockNum !== null && stockNum <= 5)
+          ? `<div style="font-size:0.8rem;color:#e67e22;font-weight:600;margin:4px 0;">¡Solo quedan ${stockNum}!</div>` : '';
+        const controlHtml = agotado
+          ? `<div class="qty-control" style="justify-content:center;"><span style="color:#c0392b;font-weight:700;">⛔ Agotado</span></div>`
+          : `<div class="qty-control">
+                <button class="qty-btn" onclick="changeQty(${p.id}, -1)">−</button>
+                <span class="qty-value" id="qty-${p.id}">${qty}</span>
+                <button class="qty-btn" onclick="changeQty(${p.id}, 1)">+</button>
+              </div>`;
         return `
-          <div class="product-card" id="prod-${p.id}">
+          <div class="product-card${agotado ? ' agotado' : ''}" id="prod-${p.id}"${agotado ? ' style="opacity:0.55;"' : ''}>
             <div class="product-img">${imageContent}</div>
             <div class="product-info">
               <h3 class="product-name">${p.nombre}</h3>
               ${p.descripcion ? `<p class="product-desc">${p.descripcion}</p>` : ''}
               <div class="product-price">RD$ ${p.precio} <small>/ unidad</small></div>
-              <div class="qty-control">
-                <button class="qty-btn" onclick="changeQty(${p.id}, -1)">−</button>
-                <span class="qty-value" id="qty-${p.id}">${qty}</span>
-                <button class="qty-btn" onclick="changeQty(${p.id}, 1)">+</button>
-              </div>
+              ${lowNote}
+              ${controlHtml}
             </div>
           </div>
         `;
@@ -1092,11 +1100,18 @@
     }
 
     function changeQty(id, delta) {
+      const p = products.find(x => x.id == id);
       const current = cart[id] || 0;
-      const newQty = Math.max(0, current + delta);
+      let newQty = Math.max(0, current + delta);
+      // Respetar el stock si el producto lleva control de inventario.
+      if (p && p.stock !== null && p.stock !== undefined && newQty > p.stock) {
+        newQty = p.stock;
+        if (delta > 0) { showToast('Solo quedan ' + p.stock + ' de ' + p.nombre, 'error'); }
+      }
       if (newQty === 0) delete cart[id];
       else cart[id] = newQty;
-      document.getElementById('qty-' + id).textContent = newQty;
+      const qtyEl = document.getElementById('qty-' + id);
+      if (qtyEl) qtyEl.textContent = newQty;
       if (delta > 0) {
         const card = document.getElementById('prod-' + id);
         card.classList.add('added');
