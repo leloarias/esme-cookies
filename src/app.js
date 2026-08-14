@@ -8,6 +8,11 @@ const { securityHeaders } = require('./middleware/security');
 
 const app = express();
 
+// Detrás de un túnel (Cloudflare Tunnel, Tailscale Funnel, nginx...) todas las
+// conexiones llegan del proxy local; sin esto req.ip siempre da la IP del
+// túnel y el límite de intentos de login (por IP) deja de servir para nada.
+app.set('trust proxy', 1);
+
 // Cabeceras de seguridad en todas las respuestas
 app.use(securityHeaders);
 
