@@ -8,9 +8,9 @@ let JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') {
-    console.error('[FATAL] Falta JWT_SECRET en el entorno (.env). Definí un valor ' +
+    console.error('[FATAL] Falta JWT_SECRET en el entorno (.env). Define un valor ' +
       'fijo y secreto antes de arrancar en producción.\n' +
-      '  Generalo con: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+      '  Genéralo con: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
     process.exit(1);
   }
   // Solo desarrollo local: valor estable (no aleatorio) para no cerrar sesión al reiniciar.

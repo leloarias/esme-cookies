@@ -46,12 +46,23 @@ h3,
 .chart-title,
 .serif {
     font-family: 'Playfair Display', serif !important;
-    color: var(--primary) !important;
     letter-spacing: -0.5px;
 }
 
-/* Glassmorphism Panels */
-.header,
+/* El color de los títulos se HEREDA del contenedor: oscuro sobre fondo claro,
+   blanco sobre encabezados oscuros. Antes se forzaba con !important y dejaba
+   invisibles los títulos sobre fondos oscuros (modales, etc.). */
+h1,
+h2,
+h3 {
+    color: inherit;
+}
+.chart-title {
+    color: var(--primary);
+}
+
+/* Glassmorphism Panels (el header queda fuera: es oscuro por diseño y su texto
+   -claro- pierde contraste si se vuelve vidrio claro como las demás tarjetas) */
 .hero,
 .stat-card,
 .chart-card,

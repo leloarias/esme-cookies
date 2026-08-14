@@ -86,6 +86,20 @@ router.post('/api/config', verifyToken, async (req, res) => {
       }
       await prepare('UPDATE config SET bankAccounts=? WHERE id=1').run(value);
     }
+    if (body.envioZones !== undefined) {
+      let value = body.envioZones;
+      if (typeof value !== 'string') {
+        value = JSON.stringify(value);
+      }
+      await prepare('UPDATE config SET envioZones=? WHERE id=1').run(value);
+    }
+    if (body.categoryImages !== undefined) {
+      let value = body.categoryImages;
+      if (typeof value !== 'string') {
+        value = JSON.stringify(value);
+      }
+      await prepare('UPDATE config SET categoryImages=? WHERE id=1').run(value);
+    }
     if (body.msgEsperandoPago !== undefined) {
       await prepare('UPDATE config SET msgEsperandoPago=? WHERE id=1').run(body.msgEsperandoPago);
     }
@@ -100,6 +114,9 @@ router.post('/api/config', verifyToken, async (req, res) => {
     }
     if (body.msgEntregado !== undefined) {
       await prepare('UPDATE config SET msgEntregado=? WHERE id=1').run(body.msgEntregado);
+    }
+    if (body.msgCancelado !== undefined) {
+      await prepare('UPDATE config SET msgCancelado=? WHERE id=1').run(body.msgCancelado);
     }
     if (body.customBoxConfig !== undefined) {
       let value = body.customBoxConfig;
@@ -138,7 +155,7 @@ router.post('/api/config', verifyToken, async (req, res) => {
 
 router.get('/api/public-config', async (req, res) => {
   try {
-    const config = await prepare(`SELECT shopName, shopPhone, currency, primaryColor, accentColor, isOpen, pickupAddress, deliveryPrice, envioPrice, bankAccounts, customBoxConfig,
+    const config = await prepare(`SELECT shopName, shopPhone, currency, primaryColor, accentColor, isOpen, pickupAddress, deliveryPrice, envioPrice, bankAccounts, customBoxConfig, envioZones, categoryImages,
       msgEsperandoPago, msgPagoConfirmado, msgPreparando, msgListo, msgEntregado FROM config WHERE id = 1`).get();
     if (config) {
       if (config.customBoxConfig) {
@@ -164,6 +181,26 @@ router.get('/api/public-config', async (req, res) => {
       }
     } else if (config) {
       config.bankAccounts = [];
+    }
+    if (config && config.envioZones) {
+      try {
+        const parsed = JSON.parse(config.envioZones);
+        config.envioZones = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        config.envioZones = [];
+      }
+    } else if (config) {
+      config.envioZones = [];
+    }
+    if (config && config.categoryImages) {
+      try {
+        const parsed = JSON.parse(config.categoryImages);
+        config.categoryImages = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        config.categoryImages = [];
+      }
+    } else if (config) {
+      config.categoryImages = [];
     }
     res.json(config || {});
   } catch (err) {

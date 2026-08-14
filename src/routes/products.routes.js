@@ -13,7 +13,15 @@ function parseStock(v) {
 
 router.get('/api/products', async (req, res) => {
   try {
-    const products = await prepare('SELECT * FROM productos').all();
+    // Si la petición es del admin (?all=1 o con token), devuelve TODOS los productos (incluyendo desactivados)
+    // Si es del cliente público, devuelve solo los activos (activo = 1)
+    const includeAll = req.query.all === '1';
+    let products;
+    if (includeAll) {
+      products = await prepare('SELECT * FROM productos ORDER BY id ASC').all();
+    } else {
+      products = await prepare('SELECT * FROM productos WHERE activo = 1 ORDER BY id ASC').all();
+    }
     res.json(products);
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener productos' });
@@ -21,7 +29,7 @@ router.get('/api/products', async (req, res) => {
 });
 
 router.post('/api/products', verifyToken, async (req, res) => {
-  const { nombre, precio, descripcion, imagen, stock, tipo, box_config } = req.body;
+  const { nombre, precio, descripcion, imagen, stock, tipo, box_config, categoria, receta } = req.body;
   if (typeof nombre !== 'string' || !nombre.trim()) return res.status(400).json({ error: 'El nombre es requerido' });
   if (tipo !== undefined && !['producto', 'caja'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' });
   const precioVal = (tipo === 'caja') ? (precio || 0) : precio;
@@ -30,8 +38,9 @@ router.post('/api/products', verifyToken, async (req, res) => {
   }
   try {
     const boxConfigStr = box_config ? (typeof box_config === 'string' ? box_config : JSON.stringify(box_config)) : null;
-    const info = await prepare("INSERT INTO productos (nombre, precio, descripcion, imagen, stock, tipo, box_config) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(nombre.trim(), precioVal, descripcion || '', imagen || '', parseStock(stock), tipo || 'producto', boxConfigStr);
+    const recetaStr = receta ? (typeof receta === 'string' ? receta : JSON.stringify(receta)) : '[]';
+    const info = await prepare("INSERT INTO productos (nombre, precio, descripcion, imagen, stock, tipo, box_config, categoria, receta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(nombre.trim(), precioVal, descripcion || '', imagen || '', parseStock(stock), tipo || 'producto', boxConfigStr, (categoria || 'Galletas').trim(), recetaStr);
     res.json({ success: true, id: info.lastInsertRowid });
   } catch (err) {
     res.status(500).json({ error: 'Error al guardar producto' });
@@ -39,7 +48,7 @@ router.post('/api/products', verifyToken, async (req, res) => {
 });
 
 router.put('/api/products/:id', verifyToken, async (req, res) => {
-  const { nombre, precio, descripcion, imagen, tipo, box_config } = req.body;
+  const { nombre, precio, descripcion, imagen, tipo, box_config, categoria, receta } = req.body;
   const id = req.params.id;
   try {
     const current = await prepare('SELECT * FROM productos WHERE id = ?').get(id);
@@ -58,12 +67,16 @@ router.put('/api/products/:id', verifyToken, async (req, res) => {
 
     const nombreVal = nombre !== undefined ? nombre.trim() : current.nombre;
     const stockVal = ('stock' in req.body) ? parseStock(req.body.stock) : current.stock;
+    const categoriaVal = categoria !== undefined ? (categoria.trim() || 'Galletas') : current.categoria;
     const boxConfigStr = box_config !== undefined
       ? (typeof box_config === 'string' ? box_config : JSON.stringify(box_config))
       : current.box_config;
+    const recetaStr = receta !== undefined
+      ? (typeof receta === 'string' ? receta : JSON.stringify(receta))
+      : current.receta;
 
-    await prepare('UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ?, stock = ?, tipo = ?, box_config = ? WHERE id = ?')
-      .run(nombreVal, tipoVal !== 'caja' ? precioVal : (precioVal || 0), descripcion || '', imagen || '', stockVal, tipoVal, boxConfigStr, id);
+    await prepare('UPDATE productos SET nombre = ?, precio = ?, descripcion = ?, imagen = ?, stock = ?, tipo = ?, box_config = ?, categoria = ?, receta = ? WHERE id = ?')
+      .run(nombreVal, tipoVal !== 'caja' ? precioVal : (precioVal || 0), descripcion || '', imagen || '', stockVal, tipoVal, boxConfigStr, categoriaVal, recetaStr, id);
     res.json({ success: true });
   } catch (err) {
     console.error('Error actualizando producto:', err);
@@ -101,12 +114,13 @@ router.post('/api/products/:id/stock', verifyToken, async (req, res) => {
 router.delete('/api/products/:id', verifyToken, async (req, res) => {
   const id = req.params.id;
   try {
-    const product = await prepare('SELECT tipo FROM productos WHERE id = ?').get(id);
+    const product = await prepare('SELECT tipo FROM productos WHERE id = ?').get([id]);
     if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
-    if (product.tipo === 'caja') return res.status(400).json({ error: 'No se puede eliminar una Caja Personalizada' });
-    await prepare('DELETE FROM productos WHERE id = ?').run(id);
+    await prepare('DELETE FROM movimientos_stock WHERE producto_id = ?').run([id]);
+    await prepare('DELETE FROM productos WHERE id = ?').run([id]);
     res.json({ success: true });
   } catch (err) {
+    console.error('DELETE product error:', err);
     res.status(500).json({ error: 'Error al eliminar producto' });
   }
 });

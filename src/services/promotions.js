@@ -20,11 +20,33 @@ function filtrarPromocionesVigentes(promos, currentDate, currentTime) {
   });
 }
 
+// Monto del carrito sobre el que realmente aplica un descuento_pct/fijo:
+// "Todos" es el subtotal completo, pero "Por categoría" o "Productos
+// específicos" deben limitarse a esos items — si no, un 10% "solo para
+// Bebidas" terminaría descontando el pedido entero.
+function baseAplicablePromo(promo, cartItemsArr, subTotalNum) {
+  if (promo.aplica_a === 'categoria' && promo.categoria && promo.categoria !== 'todos') {
+    return cartItemsArr
+      .filter(item => (item.categoria || '') === promo.categoria)
+      .reduce((s, item) => s + item.precio * item.qty, 0);
+  }
+  if (promo.aplica_a === 'especificos' && promo.productos_ids) {
+    let ids = [];
+    try { ids = JSON.parse(promo.productos_ids); } catch (e) { ids = []; }
+    if (Array.isArray(ids) && ids.length > 0) {
+      return cartItemsArr
+        .filter(item => ids.includes(item.id))
+        .reduce((s, item) => s + item.precio * item.qty, 0);
+    }
+  }
+  return subTotalNum;
+}
+
 // Evalúa las promociones vigentes contra el carrito y devuelve el descuento
 // total sobre productos, el descuento de envío y las promos aplicadas.
-// ctx: { subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr }
+// ctx: { subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr, clientePedidos }
 function evaluarPromociones(promosActivas, ctx) {
-  const { subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr = [] } = ctx;
+  const { subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr = [], clientePedidos = 0 } = ctx;
 
   let descuentoTotal = 0;
   let envioDescuento = 0;
@@ -33,6 +55,20 @@ function evaluarPromociones(promosActivas, ctx) {
   promosActivas.forEach(promo => {
     let aplica = false;
     let ahorro = 0;
+
+    // Audiencia: solo clientes nuevos (sin pedidos previos)
+    if (promo.solo_clientes_nuevos && clientePedidos > 0) {
+      console.log(`[Order Debug] Promo ${promo.titulo} rechazada: solo clientes nuevos (cliente tiene ${clientePedidos} pedidos)`);
+      return;
+    }
+    // Audiencia: solo clientes leales (con N o más pedidos previos)
+    if (promo.solo_clientes_leales) {
+      const min = promo.min_pedidos_leal || 3;
+      if (clientePedidos < min) {
+        console.log(`[Order Debug] Promo ${promo.titulo} rechazada: solo clientes leales (necesita ${min}+ pedidos, cliente tiene ${clientePedidos})`);
+        return;
+      }
+    }
 
     if (promo.compra_minima > 0 && subTotalNum < promo.compra_minima) {
       console.log(`[Order Debug] Promo ${promo.titulo} rechazada: compra_minima ${promo.compra_minima} > ${subTotalNum}`);
@@ -53,14 +89,18 @@ function evaluarPromociones(promosActivas, ctx) {
     }
 
     switch (promo.tipo) {
-      case 'descuento_pct':
-        ahorro = Math.round(subTotalNum * (promo.descuento_pct / 100));
+      case 'descuento_pct': {
+        const base = baseAplicablePromo(promo, cartItemsArr, subTotalNum);
+        ahorro = Math.round(base * (promo.descuento_pct / 100));
         aplica = ahorro > 0;
         break;
-      case 'descuento_fijo':
-        ahorro = promo.descuento_fijo;
-        aplica = subTotalNum > 0;
+      }
+      case 'descuento_fijo': {
+        const base = baseAplicablePromo(promo, cartItemsArr, subTotalNum);
+        ahorro = Math.min(promo.descuento_fijo, base);
+        aplica = base > 0;
         break;
+      }
       case 'free_delivery':
         if (tipoEntrega === 'delivery') {
           envioDescuento = parseFloat(envio) || 0;

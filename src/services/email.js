@@ -155,7 +155,7 @@ async function sendCustomerConfirmationEmail(orderData) {
               <p style="color:#555;margin:10px 0 0;">Una vez confirmado el pago, prepararemos tu pedido.</p>
             </div>
             <div style="text-align:center;margin:20px 0;">
-              <a href="${(process.env.APP_URL || 'http://localhost:3001')}/seguimiento?tel=${(orderData.telefono || '').replace(/\D/g, '').slice(-10)}" style="display:inline-block;background:#2C1810;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;">📍 Seguí tu pedido</a>
+              <a href="${(process.env.APP_URL || 'http://localhost:3001')}/seguimiento?tel=${(orderData.telefono || '').replace(/\D/g, '').slice(-10)}" style="display:inline-block;background:#2C1810;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;">📍 Sigue tu pedido</a>
             </div>
           </div>
           <div style="background:#F5EDE4;padding:20px;text-align:center;">
@@ -242,8 +242,75 @@ async function sendStatusChangeEmail(orderData, newStatus) {
   }
 }
 
+// Email al ADMIN cuando ingredientes quedan con poco stock
+async function sendLowStockEmail(ingredientesBajos) {
+  try {
+    const config = await prepare('SELECT * FROM config WHERE id = 1').get() || {};
+
+    if (config.emailNotifications != 1) {
+      console.log('[Email] Notificaciones desactivadas.');
+      return { success: false, reason: 'disabled' };
+    }
+    if (!config.adminEmail || !config.emailUser || !config.emailPass) {
+      console.log('[Email] Credenciales SMTP no configuradas.');
+      return { success: false, reason: 'no_config' };
+    }
+
+    const transporter = getTransporter(config);
+
+    const filasHtml = ingredientesBajos.map(ing => `
+      <tr>
+        <td style="padding:12px 0;border-bottom:1px solid #eee;color:#2C1810;font-weight:600;">${ing.nombre}</td>
+        <td style="padding:12px 0;border-bottom:1px solid #eee;text-align:right;color:#c0392b;font-weight:700;">${ing.stock} ${ing.unidad}</td>
+        <td style="padding:12px 0;border-bottom:1px solid #eee;text-align:right;color:#555;">${ing.stock_minimo} ${ing.unidad}</td>
+      </tr>
+    `).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+      <body style="margin:0;padding:0;font-family:'Segoe UI',sans-serif;background:#f5f5f5;">
+        <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          <div style="background:linear-gradient(135deg,#8B2C1A,#c0392b);padding:35px 20px;text-align:center;">
+            <div style="font-size:3.5rem;">⚠️</div>
+            <h1 style="color:#FAEDCD;margin:0;font-size:1.9rem;">${config.shopName || 'Esme Cookies'}</h1>
+            <p style="color:#fff;margin:15px 0 0;font-size:1.2rem;font-weight:600;">Ingredientes con Poco Stock</p>
+          </div>
+          <div style="padding:25px 30px;">
+            <p style="color:#555;font-size:1rem;">Estos ingredientes llegaron al mínimo o menos. Es hora de reabastecer:</p>
+            <table style="width:100%;border-collapse:collapse;margin-top:10px;">
+              <tr>
+                <td style="padding:8px 0;border-bottom:2px solid #2C1810;color:#8B6914;font-size:0.85rem;">INGREDIENTE</td>
+                <td style="padding:8px 0;border-bottom:2px solid #2C1810;color:#8B6914;font-size:0.85rem;text-align:right;">STOCK ACTUAL</td>
+                <td style="padding:8px 0;border-bottom:2px solid #2C1810;color:#8B6914;font-size:0.85rem;text-align:right;">MÍNIMO</td>
+              </tr>
+              ${filasHtml}
+            </table>
+          </div>
+          <div style="background:#F5EDE4;padding:28px 20px;text-align:center;">
+            <a href="${process.env.APP_URL || 'http://localhost:3001'}/admin" style="display:inline-block;background:#2C1810;color:white;padding:16px 32px;border-radius:10px;text-decoration:none;font-weight:700;">Reabastecer en el Panel →</a>
+          </div>
+        </div>
+      </body></html>`;
+
+    await transporter.sendMail({
+      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailUser}>`,
+      to: config.adminEmail,
+      subject: `⚠️ Poco stock: ${ingredientesBajos.map(i => i.nombre).join(', ')}`,
+      html: htmlContent,
+      priority: 'high'
+    });
+
+    console.log(`[Email] ✅ Alerta de stock bajo enviada (${ingredientesBajos.length} ingredientes)`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Email] Error enviando alerta de stock bajo:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendNewOrderEmail,
   sendCustomerConfirmationEmail,
-  sendStatusChangeEmail
+  sendStatusChangeEmail,
+  sendLowStockEmail
 };

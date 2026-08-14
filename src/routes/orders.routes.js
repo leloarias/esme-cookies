@@ -5,7 +5,8 @@ const { sendNewOrderEmail, sendCustomerConfirmationEmail, sendStatusChangeEmail 
 const { normalizePhone, sanitizeString, getDominicanDateTime } = require('../utils/helpers');
 const { filtrarPromocionesVigentes, evaluarPromociones } = require('../services/promotions');
 const { saveClientFromOrder, ensureClientExists } = require('../services/clients');
-const { checkStock, decrementStock } = require('../services/inventory');
+const { checkStock, decrementStock, restoreStockForOrder } = require('../services/inventory');
+const { consumeForOrder: consumeIngredientsForOrder, restoreForOrder: restoreIngredientsForOrder, checkIngredientStock } = require('../services/ingredients');
 const { nextOrderNumber } = require('../services/orderNumber');
 const { getIO } = require('../services/realtime');
 
@@ -64,8 +65,10 @@ router.get('/api/orders/:num', verifyToken, async (req, res) => {
   }
 });
 
+const METODOS_PAGO_VALIDOS = ['Transferencia', 'Efectivo'];
+
 router.post('/api/orders', async (req, res) => {
-  let { cliente, telefono, email, productos, cantidad, precio, subtotal, envio, total, pago, tipo_entrega, observaciones, direccion, sector, nota } = req.body;
+  let { cliente, telefono, email, productos, pago, tipo_entrega, observaciones, direccion, sector, nota } = req.body;
 
   cliente = sanitizeString(cliente);
   telefono = sanitizeString(telefono);
@@ -94,15 +97,19 @@ router.post('/api/orders', async (req, res) => {
     return res.status(403).json({ error: 'Tu cuenta está inactiva. Por favor contacta al administrador.' });
   }
 
-  const config = await prepare('SELECT isOpen FROM config WHERE id = 1').get() || { isOpen: 1 };
+  const config = await prepare('SELECT isOpen, deliveryPrice, envioPrice, envioZones FROM config WHERE id = 1').get() || { isOpen: 1, deliveryPrice: 0, envioPrice: 0 };
   if (config.isOpen == 0) {
     return res.status(403).json({ error: 'La tienda está cerrada actualmente. No se pueden procesar pedidos.' });
   }
 
+  // Método de pago contra lista blanca: evita que alguien inyecte texto tipo
+  // "PAGADO - confirmado" desde la consola del navegador para engañar al staff.
+  const pagoValidado = METODOS_PAGO_VALIDOS.includes(pago) ? pago : 'Transferencia';
+
   const fullObservaciones = [
     observaciones,
     direccion ? 'Direccion: ' + direccion : '',
-    sector ? 'Sector: ' + sector : '',
+    sector ? (tipo_entrega === 'envio' ? 'Destino: ' : 'Sector: ') + sector : '',
     nota
   ].filter(Boolean).join(' | ');
 
@@ -110,26 +117,74 @@ router.post('/api/orders', async (req, res) => {
 
   const { date: currentDate, time: currentTime } = getDominicanDateTime();
 
-  console.log(`[Order Debug] DR Date: ${currentDate}, DR Time: ${currentTime}, Subtotal: ${subtotal}, Cantidad: ${cantidad}`);
-
   const promosActivasRaw = await prepare("SELECT * FROM promociones WHERE activa = 1").all();
   const promosActivas = filtrarPromocionesVigentes(promosActivasRaw, currentDate, currentTime);
 
-  const subTotalNum = parseFloat(subtotal) || 0;
   const tipoEntrega = tipo_entrega || 'pickup';
-  const totalItems = parseInt(cantidad) || 0;
 
-  const cartItemsArr = req.body.cartItems || [];
-  console.log(`[Order Debug] cartItemsArr length: ${cartItemsArr.length}`);
+  // Precios recalculados en el servidor contra la tabla real de productos:
+  // nunca confiar en precio/subtotal/total que manda el navegador (se puede
+  // editar desde la consola). Los ids que no existen en el catálogo se ignoran.
+  const cartItemsRaw = req.body.cartItems || [];
+  const cartItemsArr = [];
+  let subTotalNum = 0;
+  for (const item of cartItemsRaw) {
+    const qty = parseInt(item && item.qty) || 0;
+    if (qty <= 0) continue;
+    const prod = await prepare('SELECT id, nombre, precio, categoria FROM productos WHERE id = ?').get(item.id);
+    if (!prod) continue;
+    const precioReal = Number(prod.precio) || 0;
+    subTotalNum += precioReal * qty;
+    cartItemsArr.push({ id: prod.id, nombre: prod.nombre, precio: precioReal, categoria: prod.categoria, qty });
+  }
+  if (cartItemsArr.length === 0) {
+    return res.status(400).json({ error: 'El carrito está vacío o los productos ya no existen.' });
+  }
+  const totalItems = cartItemsArr.reduce((a, item) => a + item.qty, 0);
+
+  // El precio de envío también se resuelve en el servidor: nunca se confía en
+  // un precio que mande el navegador.
+  //
+  // El delivery local (dentro de San Juan) es un precio único. El envío
+  // nacional sí varía mucho según destino, así que si hay zonas configuradas,
+  // son la lista cerrada de provincias/ciudades con envío: un destino fuera de
+  // esa lista se rechaza en vez de cobrar un precio genérico que no cubre el flete real.
+  let envio = tipoEntrega === 'pickup' ? 0 : (tipoEntrega === 'delivery' ? Number(config.deliveryPrice) || 0 : Number(config.envioPrice) || 0);
+  if (tipoEntrega === 'envio') {
+    let zonas = [];
+    try { zonas = JSON.parse(config.envioZones || '[]'); } catch (e) { zonas = []; }
+    if (Array.isArray(zonas) && zonas.length > 0) {
+      const zona = zonas.find(z => (z.nombre || '').trim().toLowerCase() === (sector || '').trim().toLowerCase());
+      if (!zona) {
+        return res.status(400).json({ error: 'Elegí la provincia o ciudad de destino para calcular el envío.' });
+      }
+      envio = Number(zona.precio) || 0;
+    }
+  }
+
+  console.log(`[Order Debug] DR Date: ${currentDate}, DR Time: ${currentTime}, Subtotal: ${subTotalNum}, Cantidad: ${totalItems}`);
+
+  // Obtener pedidos previos del cliente para validar promos de nuevos/leales
+  const clienteRow = await prepare('SELECT total_pedidos FROM clientes WHERE telefono = ?').get(normalizePhone(telefono));
+  const clientePedidos = clienteRow ? (clienteRow.total_pedidos || 0) : 0;
+  console.log(`[Order Debug] Cliente pedidos previos: ${clientePedidos}`);
 
   // Control de inventario: rechazar el pedido si algún producto no tiene stock suficiente.
   const stockCheck = await checkStock(cartItemsArr);
   if (!stockCheck.ok) {
     return res.status(409).json({ error: stockCheck.error });
   }
+  // Un producto puede figurar con stock disponible pero no tener materia
+  // prima real para prepararlo (el stock del producto y el de sus
+  // ingredientes son dos cosas separadas) — se rechaza igual aunque el
+  // stock del producto "se vea bien".
+  const ingredientStockCheck = await checkIngredientStock(cartItemsArr);
+  if (!ingredientStockCheck.ok) {
+    return res.status(409).json({ error: ingredientStockCheck.error });
+  }
 
   const { descuentoTotal, envioDescuento, promosAplicadas } = evaluarPromociones(promosActivas, {
-    subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr
+    subTotalNum, tipoEntrega, totalItems, envio, cartItemsArr, clientePedidos
   });
 
   const descuentoFinal = Math.min(descuentoTotal, subTotalNum);
@@ -142,7 +197,7 @@ router.post('/api/orders', async (req, res) => {
   try {
     const newNum = await nextOrderNumber();
 
-    const totalConDescuento = Math.max(0, (parseFloat(subtotal) || 0) - descuentoFinal + (parseFloat(envio) || 0) - envioDescuento);
+    const totalConDescuento = Math.max(0, subTotalNum - descuentoFinal + envio - envioDescuento);
 
     await prepare(`
       INSERT INTO pedidos (
@@ -150,8 +205,8 @@ router.post('/api/orders', async (req, res) => {
         pago, estado, observaciones, tipo_entrega, estado_timestamps, direccion, sector, nota, promociones_aplicadas
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      newNum, fechaStr, cliente, telefono, productos, cantidad || 1, precio || 0,
-      subtotal || total || 0, descuentoFinal + envioDescuento, descuentoDetalles, envio || 0, totalConDescuento, pago || 'Transferencia',
+      newNum, fechaStr, cliente, telefono, productos, totalItems, subTotalNum,
+      subTotalNum, descuentoFinal + envioDescuento, descuentoDetalles, envio, totalConDescuento, pagoValidado,
       fullObservaciones, tipo_entrega || 'pickup', estadoTimestamps, direccion || '', sector || '', nota || '', promosJson
     );
 
@@ -160,11 +215,11 @@ router.post('/api/orders', async (req, res) => {
       cliente,
       telefono,
       productos,
-      subtotal: parseFloat(subtotal) || 0,
+      subtotal: subTotalNum,
       descuento: descuentoFinal + envioDescuento,
       descuento_detalles: descuentoDetalles,
       promos_aplicadas: promosAplicadas,
-      envio: (parseFloat(envio) || 0) - envioDescuento,
+      envio: envio - envioDescuento,
       total: totalConDescuento,
       tipo_entrega,
       observaciones: fullObservaciones
@@ -179,8 +234,10 @@ router.post('/api/orders', async (req, res) => {
       await prepare("UPDATE promociones SET usos_actuales = usos_actuales + 1 WHERE id = ?").run(p.id);
     }
 
-    // Descontar inventario de los productos con control de stock.
+    // Descontar inventario de los productos con control de stock, y los
+    // ingredientes que corresponden según la receta de cada uno.
     await decrementStock(cartItemsArr, newNum);
+    await consumeIngredientsForOrder(cartItemsArr, newNum);
 
     res.json({
       success: true,
@@ -271,7 +328,9 @@ router.put('/api/orders/:num', verifyToken, async (req, res) => {
         await ensureClientExists(telNorm, existing.cliente);
         await prepare('UPDATE clientes SET total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
           .run(orderTotal, orderDescuento, telNorm);
-        console.log('[PUT Order] Cancelado, restado del cliente:', telNorm);
+        await restoreStockForOrder(num);
+        await restoreIngredientsForOrder(num);
+        console.log('[PUT Order] Cancelado, restado del cliente y devuelto el stock:', telNorm);
       }
 
       // Email al cliente notificando el nuevo estado (si tiene email y hay SMTP; si no, se omite).
@@ -297,12 +356,17 @@ router.delete('/api/orders/:num', verifyToken, async (req, res) => {
 
   try {
     if (hardDelete) {
-      const order = await prepare('SELECT telefono, total, descuento, cliente FROM pedidos WHERE numero = ?').get(num);
-      if (order && order.telefono) {
+      const order = await prepare('SELECT estado, telefono, total, descuento, cliente FROM pedidos WHERE numero = ?').get(num);
+      // Solo revertir estadísticas del cliente y devolver stock si el pedido no
+      // estaba ya cancelado (si lo estaba, ya se revirtió/devolvió en su momento;
+      // repetirlo aquí restaría dos veces y dejaría al cliente con saldo negativo falso).
+      if (order && order.telefono && order.estado !== 'Cancelado') {
         const telNorm = normalizePhone(order.telefono);
         await ensureClientExists(telNorm, order.cliente);
         await prepare('UPDATE clientes SET total_pedidos = MAX(0, total_pedidos - 1), total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
           .run(parseFloat(order.total) || 0, parseFloat(order.descuento) || 0, telNorm);
+        await restoreStockForOrder(num);
+        await restoreIngredientsForOrder(num);
       }
       await prepare('DELETE FROM pedidos WHERE numero = ?').run(num);
     } else {
@@ -317,6 +381,8 @@ router.delete('/api/orders/:num', verifyToken, async (req, res) => {
           await ensureClientExists(telNorm, order.cliente);
           await prepare('UPDATE clientes SET total_gastado = MAX(0, total_gastado - ?), total_descuentos = MAX(0, total_descuentos - ?) WHERE telefono = ?')
             .run(parseFloat(order.total) || 0, parseFloat(order.descuento) || 0, telNorm);
+          await restoreStockForOrder(num);
+          await restoreIngredientsForOrder(num);
         }
       }
     }

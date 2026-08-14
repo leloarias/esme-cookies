@@ -64,7 +64,7 @@
       <div id="tab-dashboard">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">📊 Dashboard</span>
-          <button class="help-btn" onclick="toggleHelp('dashboard')">?</button>
+          <button class="help-btn" onclick="toggleHelp('dashboard', this)"><span class="dot">i</span>Guía</button>
         </div>
         <div id="help-dashboard" class="help-panel">
           <h4>📊 ¿Cómo usar el Dashboard?</h4>
@@ -73,7 +73,7 @@
             <li><strong>Tarjetas superiores:</strong> Total de pedidos, ventas totales, ticket promedio y clientes únicos</li>
             <li><strong>Filtros de fecha:</strong> Usa los filtros de arriba para ver estadísticas de un mes o día específico</li>
             <li><strong>Gráficos:</strong> Muestran tus productos más vendidos, distribución por tipo de entrega y tendencias</li>
-            <li><strong>Estado de Resultados:</strong> Resumen financiero con ventas brutas, descuentos, envíos y ventas netas</li>
+            <li><strong>Estado de Resultados:</strong> ventas brutas, descuentos, envíos y ventas netas, y debajo la <strong>Ganancia Neta</strong> real: a las ventas netas se le resta el costo de los ingredientes que se usaron (según la receta de cada producto vendido), no solo lo que entra menos descuentos</li>
           </ul>
           <div class="tip">💡 Tip: Usa el botón "Exportar Excel" para descargar un reporte completo con todas las estadísticas.</div>
         </div>
@@ -205,19 +205,19 @@
       <div id="tab-pedidos" class="hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">📋 Pedidos</span>
-          <button class="help-btn" onclick="toggleHelp('pedidos')">?</button>
+          <button class="help-btn" onclick="toggleHelp('pedidos', this)"><span class="dot">i</span>Guía</button>
         </div>
         <div id="help-pedidos" class="help-panel">
           <h4>📋 ¿Cómo usar Pedidos?</h4>
           <p>Aquí gestionas <strong>todos los pedidos</strong> de tus clientes.</p>
           <ul>
             <li><strong>Filtros:</strong> Busca por nombre, número, teléfono o filtra por estado y fecha</li>
-            <li><strong>Cambiar estado:</strong> Haz clic en un pedido → selecciona el nuevo estado (Pendiente → Confirmado → Preparando → Listo → Entregado)</li>
+            <li><strong>Cambiar estado:</strong> Haz clic en un pedido → el botón te lleva al siguiente estado (Pendiente → Esperando Pago → Confirmado → Preparando → Listo → Entregado)</li>
             <li><strong>WhatsApp automático:</strong> Al cambiar el estado, se genera un mensaje listo para enviar al cliente</li>
-            <li><strong>Cancelar:</strong> Marca el pedido como "Cancelado" (se mantiene en el historial)</li>
+            <li><strong>Cancelar:</strong> Marca el pedido como "Cancelado" y devuelve solo el stock de productos e ingredientes que se habían descontado (se mantiene en el historial)</li>
             <li><strong>Eliminar:</strong> Borra permanentemente el pedido de la base de datos (no se puede deshacer)</li>
           </ul>
-          <div class="tip">💡 Tip: Los pedidos Pendientes se cancelan automáticamente después de 24 horas sin confirmar.</div>
+          <div class="tip">💡 Tip: Los pedidos en Pendiente o Esperando Pago se cancelan automáticamente después de 24 horas sin confirmar (y su stock se devuelve solo).</div>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
           <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 0;">
@@ -281,6 +281,19 @@
       </div>
 
       <div id="tab-preparacion" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">👨‍🍳 Preparación</span>
+          <button class="help-btn" onclick="toggleHelp('preparacion', this)"><span class="dot">i</span>Guía</button>
+        </div>
+        <div id="help-preparacion" class="help-panel">
+          <h4>👨‍🍳 ¿Cómo usar Preparación?</h4>
+          <p>Esta pestaña es tu <strong>lista de cocina del día</strong>: cuánto hacer de cada galleta y cómo se entrega, sacado de los pedidos activos.</p>
+          <ul>
+            <li><strong>Productos a Preparar:</strong> el total a hornear de cada producto, sumando todos los pedidos pendientes/en preparación</li>
+            <li><strong>Pasar a Buscar / Delivery / Envíos:</strong> los mismos pedidos agrupados por cómo se entregan, para armar las cajas en el orden correcto</li>
+          </ul>
+          <div class="tip">💡 Tip: se actualiza sola apenas entra un pedido nuevo o cambia de estado, no hace falta recargar la página.</div>
+        </div>
         <div
           style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(44,24,16,0.06); margin-bottom: 24px;">
           <h3 style="color: var(--primary); margin-bottom: 16px; font-size: 1.2rem;">Productos a Preparar</h3>
@@ -317,7 +330,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">🍪 Productos</span>
           <div style="display:flex;gap:10px;align-items:center;">
-            <button class="help-btn" onclick="toggleHelp('productos')">?</button>
+            <button class="help-btn" onclick="toggleHelp('productos', this)"><span class="dot">i</span>Guía</button>
           </div>
         </div>
         <div id="help-productos" class="help-panel">
@@ -325,12 +338,17 @@
           <p>Aquí administras el <strong>catálogo</strong> de lo que vendes.</p>
           <ul>
             <li><strong>Agregar:</strong> Haz clic en "+ Agregar" para crear un nuevo producto</li>
-            <li><strong>Editar:</strong> Haz clic en el ícono de lápiz para modificar nombre, precio o imagen</li>
-            <li><strong>Eliminar:</strong> Haz clic en el ícono de basura para quitar un producto</li>
-            <li><strong>Imagen:</strong> Sube una foto clara del producto (se guarda automáticamente)</li>
+            <li><strong>Editar:</strong> Haz clic en "Editar" para modificar nombre, precio, categoría, descripción o imagen</li>
+            <li><strong>Eliminar:</strong> Haz clic en "Eliminar" para quitar un producto</li>
+            <li><strong>Categoría:</strong> Agrupa los productos en la tienda (Galletas, Postres, Bebidas...). Escribí una nueva y se crea sola — no hace falta darla de alta en otro lado</li>
+            <li><strong>Imagen del producto:</strong> subí una foto (📷) o pegá el link de una (🔗) desde el formulario de cada producto</li>
+            <li><strong>Portada de categoría:</strong> la foto grande de fondo que ven los clientes al elegir la categoría en la tienda. Se cambia con el botón 📷/🔗 junto al nombre de la categoría (arriba de sus productos) — no es la misma foto que la del producto individual</li>
+            <li><strong>Caja Personalizable:</strong> al agregar/editar un producto, elegí el tipo "🎁 Caja personalizable" para que el cliente arme su propia caja. Ahí mismo configurás los tamaños y qué productos puede incluir (separados por categoría) — no hay una configuración de cajas aparte</li>
+            <li><strong>Receta:</strong> abajo del todo en cada producto (no aplica a cajas). Se carga <strong>por lote</strong>, tal cual la preparás: decís cuántas piezas rinde el lote y cuánto de cada ingrediente lleva ese lote completo (ej: "el lote de 24 galletas lleva 500g de harina") — el sistema hace la división sola. A partir de ahí, cada venta descuenta los ingredientes automáticamente, y si no alcanza materia prima para preparar el pedido, se rechaza aunque el producto muestre stock disponible</li>
           </ul>
-          <div class="tip">💡 Tip: Usa fotos de buena calidad y descripciones atractivas para vender más.</div>
+          <div class="tip">💡 Tip: si un producto no tiene foto, se muestra un 🍪 genérico — mejor eso que una foto que no corresponde. Subí la foto real apenas la tengas.</div>
         </div>
+
         <div class="section-title"
           style="font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--primary); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
           <button class="header-btn" onclick="openProductModal()" style="background: var(--accent);">+ Agregar</button>
@@ -342,7 +360,7 @@
       <div id="tab-inventario" class="hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">📦 Inventario</span>
-          <button class="help-btn" onclick="toggleHelp('inventario')">?</button>
+          <button class="help-btn" onclick="toggleHelp('inventario', this)"><span class="dot">i</span>Guía</button>
         </div>
         <div id="help-inventario" class="help-panel">
           <h4>📦 ¿Cómo usar Inventario?</h4>
@@ -356,6 +374,12 @@
           <div class="tip">💡 Tip: Los productos sin control de stock (stock vacío) no aparecen en alertas. Asignales un número para activar el control.</div>
         </div>
 
+        <div style="display:flex;gap:10px;margin-bottom:20px;">
+          <button type="button" id="inv-view-btn-productos" onclick="setInventarioView('productos')" style="flex:1;padding:12px;border-radius:12px;border:2px solid var(--warm);background:var(--accent);color:white;font-weight:700;cursor:pointer;">📦 Stock de Productos</button>
+          <button type="button" id="inv-view-btn-ingredientes" onclick="setInventarioView('ingredientes')" style="flex:1;padding:12px;border-radius:12px;border:2px solid var(--warm);background:white;color:var(--primary);font-weight:700;cursor:pointer;">🧂 Ingredientes</button>
+        </div>
+
+        <div id="inv-productos-section">
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px; margin-bottom:20px;" id="inv-summary">
           <div class="stat-card" style="text-align:center;">
             <div class="stat-value" id="inv-total">0</div>
@@ -435,6 +459,185 @@
             <div id="movements-list" style="padding:16px; max-height:400px; overflow-y:auto;"></div>
           </div>
         </div>
+        </div>
+        <!-- fin #inv-productos-section -->
+
+        <!-- ========== INGREDIENTES (materia prima) ========== -->
+        <div id="inv-ingredientes-section" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">🧂 Ingredientes</span>
+            <button class="help-btn" onclick="toggleHelp('ingredientes', this)"><span class="dot">i</span>Guía</button>
+          </div>
+          <div id="help-ingredientes" class="help-panel">
+            <h4>🧂 ¿Cómo usar Ingredientes?</h4>
+            <p>Tu <strong>materia prima</strong> (harina, azúcar, chispas...), separada del stock de productos terminados.</p>
+            <ul>
+              <li><strong>Agregar:</strong> Cargá cada ingrediente con su unidad (g, ml, unidad), cuánto pagaste (el sistema calcula el costo unitario solo) y el <strong>stock mínimo</strong> que dispara la alerta</li>
+              <li><strong>Tamaño del paquete:</strong> si comprás en fundas/paquetes de tamaño fijo (ej: harina de 907g), cargalo una vez. Desde ahí el <strong>Stock</strong> se cuenta en paquetes ("2.6 paq.") y la columna <strong>Medida</strong> muestra el tamaño de cada uno — por dentro el sistema sigue calculando en gramos para las recetas</li>
+              <li><strong>Receta:</strong> se carga desde cada producto (pestaña Productos → Editar), <strong>por lote completo</strong> (ej: "el lote de 24 galletas lleva 500g de harina"), no por pieza suelta. Cada venta descuenta sola los ingredientes que corresponden, y si no alcanza, el pedido se rechaza aunque el producto muestre stock</li>
+              <li><strong>Reabastecer:</strong> cuando comprás, metés cuántos paquetes compraste (o la cantidad directa) y cuánto pagaste — el costo unitario se pondera automáticamente con lo que ya tenías</li>
+              <li><strong>Ajustar:</strong> si el conteo físico no coincide con el sistema, corregilo acá (contando paquetes o la cantidad exacta). Esa diferencia es justo lo que te avisa de una fuga (merma, robo, medición de más)</li>
+              <li><strong>Alerta por correo:</strong> apenas un ingrediente cae al stock mínimo o menos, te llega un correo automático con todos los que hay que reponer (uno solo, no te satura). Se vuelve a avisar recién cuando reabastecés por encima del mínimo y vuelve a bajar</li>
+            </ul>
+            <div class="tip">💡 Tip: si un producto no tiene receta cargada, se vende igual, simplemente no descuenta ingredientes. Las alertas por correo dependen de que las notificaciones por email estén activas en Configuración.</div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px; margin-bottom:16px;">
+            <div class="stat-card" style="text-align:center;">
+              <div class="stat-value" id="ing-total">0</div>
+              <div class="stat-label">Ingredientes</div>
+            </div>
+            <div class="stat-card" style="text-align:center; border-color:var(--warning);">
+              <div class="stat-value" id="ing-bajo" style="color:var(--warning);">0</div>
+              <div class="stat-label">Stock Bajo</div>
+            </div>
+            <div class="stat-card" style="text-align:center; border-color:var(--info);">
+              <div class="stat-value" id="ing-inversion" style="color:var(--info);">RD$0</div>
+              <div class="stat-label">Inversión en Stock</div>
+            </div>
+          </div>
+
+          <button onclick="openIngredientModal()" style="padding:10px 20px; background:var(--accent); color:white; border:none; border-radius:10px; font-weight:600; cursor:pointer; margin-bottom:16px;">+ Agregar Ingrediente</button>
+
+          <div style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(44,24,16,0.06);">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr style="background:var(--cream);">
+                  <th style="padding:12px 16px; text-align:left; font-size:0.85rem; color:var(--text-muted);">Ingrediente</th>
+                  <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Stock</th>
+                  <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Medida</th>
+                  <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Costo unitario</th>
+                  <th style="padding:12px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted);">Estado</th>
+                  <th style="padding:12px 16px; text-align:right; font-size:0.85rem; color:var(--text-muted);">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="ing-tbody"></tbody>
+            </table>
+            <div id="ing-empty" style="display:none; padding:40px; text-align:center; color:var(--text-muted);">Sin ingredientes cargados todavía.</div>
+          </div>
+
+          <div style="margin-top:24px;">
+            <h3 style="font-family:'Playfair Display',serif; font-size:1.1rem; color:var(--primary); margin-bottom:12px;">Historial de Ingredientes</h3>
+            <div style="background:white; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(44,24,16,0.06);">
+              <div id="ing-movements-list" style="padding:16px; max-height:400px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== MODAL: AGREGAR/EDITAR INGREDIENTE ========== -->
+      <div class="modal-overlay" id="ingredient-modal" style="display:none;">
+        <div class="modal" style="max-width:420px;">
+          <div class="modal-header">
+            <button class="modal-close" onclick="closeIngredientModal()">✕</button>
+            <h2 id="ingredient-modal-title">Nuevo Ingrediente</h2>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="ingredient-id">
+            <div class="form-group">
+              <label>Nombre *</label>
+              <input type="text" id="ingredient-nombre" placeholder="Ej: Harina">
+            </div>
+            <div class="form-group">
+              <label>Unidad</label>
+              <select id="ingredient-unidad" onchange="calcIngredientCosto()">
+                <option value="g">gramos (g)</option>
+                <option value="kg">kilogramos (kg)</option>
+                <option value="ml">mililitros (ml)</option>
+                <option value="l">litros (l)</option>
+                <option value="unidad">unidad</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tamaño del paquete <span style="font-weight:400;color:var(--text-muted);">(opcional, ej: 907 si la funda es de 907g)</span></label>
+              <input type="number" id="ingredient-tamano-paquete" min="0" step="0.01" placeholder="Ej: 907" oninput="calcIngredientPaquetes()">
+            </div>
+            <div id="ingredient-stock-inicial-field">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label>Cuántos paquetes tienes <span style="font-weight:400;color:var(--text-muted);">(opcional)</span></label>
+                  <input type="number" id="ingredient-paquetes" min="0" step="0.01" placeholder="Ej: 3" oninput="calcIngredientPaquetes()">
+                </div>
+                <div class="form-group">
+                  <label>Cuánto compraste <span style="font-weight:400;color:var(--text-muted);">(stock inicial)</span></label>
+                  <input type="number" id="ingredient-stock-inicial" min="0" placeholder="Ej: 907" oninput="calcIngredientCosto()">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Cuánto pagaste en total (RD$)</label>
+                <input type="number" id="ingredient-precio-total" min="0" step="0.01" placeholder="Ej: 100" oninput="calcIngredientCosto()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Costo por unidad (RD$) <span style="font-weight:400;color:var(--text-muted);" id="ingredient-costo-hint">se calcula solo con lo de arriba</span></label>
+              <input type="number" id="ingredient-costo" min="0" step="0.0001" placeholder="Ej: 0.11">
+            </div>
+            <div class="form-group">
+              <label>Stock mínimo (alerta)</label>
+              <input type="number" id="ingredient-stock-minimo" min="0" placeholder="Ej: 500">
+            </div>
+          </div>
+          <div style="padding:16px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--warm);">
+            <button onclick="closeIngredientModal()" style="padding:10px 20px;background:var(--warm);border:none;border-radius:10px;font-weight:600;cursor:pointer;">Cancelar</button>
+            <button onclick="saveIngredient()" style="padding:10px 20px;background:var(--success);color:white;border:none;border-radius:10px;font-weight:600;cursor:pointer;">💾 Guardar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== MODAL: MOVIMIENTO DE INGREDIENTE (reabastecer / ajustar) ========== -->
+      <div class="modal-overlay" id="ingredient-move-modal" style="display:none;">
+        <div class="modal" style="max-width:420px;">
+          <div class="modal-header">
+            <button class="modal-close" onclick="closeIngredientMoveModal()">✕</button>
+            <h2 id="ingredient-move-title">Movimiento</h2>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="ingredient-move-id">
+            <div style="display:flex;gap:10px;margin-bottom:16px;">
+              <button type="button" id="ingredient-move-tab-restock" onclick="setIngredientMoveType('restock')" style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--warm);background:white;font-weight:600;cursor:pointer;">📥 Reabastecer</button>
+              <button type="button" id="ingredient-move-tab-adjust" onclick="setIngredientMoveType('adjust')" style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--warm);background:white;font-weight:600;cursor:pointer;">⚖️ Ajustar</button>
+            </div>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Stock actual: <strong id="ingredient-move-actual">0</strong></p>
+
+            <div id="ingredient-move-restock-fields">
+              <div class="form-group" id="ingredient-move-paquetes-field" style="display:none;">
+                <label>Cuántos paquetes compraste <span style="font-weight:400;color:var(--text-muted);" id="ingredient-move-paquete-hint"></span></label>
+                <input type="number" id="ingredient-move-paquetes" min="0" step="0.01" placeholder="Ej: 3" oninput="calcRestockPaquetes()">
+              </div>
+              <div class="form-group">
+                <label>Cantidad que compraste</label>
+                <input type="number" id="ingredient-move-cantidad" min="0" placeholder="Ej: 907" oninput="calcRestockCosto()">
+              </div>
+              <div class="form-group">
+                <label>Cuánto pagaste en total (RD$) <span style="font-weight:400;color:var(--text-muted);">(la funda entera, no por gramo)</span></label>
+                <input type="number" id="ingredient-move-precio-total" min="0" step="0.01" placeholder="Ej: 100" oninput="calcRestockCosto()">
+              </div>
+              <div class="form-group">
+                <label>Costo unitario de esta compra (RD$) <span style="font-weight:400;color:var(--text-muted);" id="ingredient-move-costo-hint">se calcula solo</span></label>
+                <input type="number" id="ingredient-move-costo" min="0" step="0.0001" placeholder="Ej: 0.11">
+              </div>
+            </div>
+            <div id="ingredient-move-adjust-fields" style="display:none;">
+              <div class="form-group" id="ingredient-move-adjust-paquetes-field" style="display:none;">
+                <label>Paquetes que contaste <span style="font-weight:400;color:var(--text-muted);" id="ingredient-move-adjust-paquete-hint"></span></label>
+                <input type="number" id="ingredient-move-adjust-paquetes" min="0" step="0.01" placeholder="Ej: 2.5" oninput="calcAdjustPaquetes()">
+              </div>
+              <div class="form-group">
+                <label>Stock real contado</label>
+                <input type="number" id="ingredient-move-nuevo-stock" min="0" placeholder="Ej: 4800">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Motivo <span style="font-weight:400;color:var(--text-muted);">(opcional)</span></label>
+              <input type="text" id="ingredient-move-motivo" placeholder="Ej: Compra en colmado, conteo semanal...">
+            </div>
+          </div>
+          <div style="padding:16px 24px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--warm);">
+            <button onclick="closeIngredientMoveModal()" style="padding:10px 20px;background:var(--warm);border:none;border-radius:10px;font-weight:600;cursor:pointer;">Cancelar</button>
+            <button onclick="saveIngredientMove()" style="padding:10px 20px;background:var(--success);color:white;border:none;border-radius:10px;font-weight:600;cursor:pointer;">💾 Guardar</button>
+          </div>
+        </div>
       </div>
 
       <!-- ========== TAB: AJUSTE DE STOCK MODAL ========== -->
@@ -481,7 +684,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
             <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">🎉 Ofertas y Promociones</span>
             <div style="display:flex;gap:10px;align-items:center;">
-              <button class="help-btn" onclick="toggleHelp('promos')">?</button>
+              <button class="help-btn" onclick="toggleHelp('promos', this)"><span class="dot">i</span>Guía</button>
             </div>
           </div>
           <div id="help-promos" class="help-panel">
@@ -490,9 +693,11 @@
             <ul>
               <li><strong>Descuento %:</strong> Ej: 10% de descuento en todos los pedidos</li>
               <li><strong>Descuento fijo:</strong> Ej: RD$50 de descuento</li>
+              <li><strong>Aplica a:</strong> el descuento (% o fijo) puede ser sobre todo el pedido, sobre una sola categoría (elegís cuál) o sobre productos puntuales (los marcás de una lista) — si el carrito no tiene nada de esa categoría/productos, la promo simplemente no se activa</li>
               <li><strong>Envío gratis:</strong> Elimina el costo de delivery/envío</li>
               <li><strong>Lleva X paga Y:</strong> Ej: Lleva 3 paga 2 (BOGO)</li>
               <li><strong>Compra mínima:</strong> El descuento solo aplica si el cliente gasta cierto monto</li>
+              <li><strong>Solo clientes nuevos / frecuentes:</strong> restringí la promo a quien nunca pidió antes, o a clientes leales con un mínimo de pedidos previos (vos elegís cuántos)</li>
               <li><strong>Fechas y horas:</strong> Programa la promo para que inicie y termine automáticamente</li>
               <li><strong>Límite de usos:</strong> Define cuántas veces se puede usar (ej: primeros 50 clientes)</li>
             </ul>
@@ -522,10 +727,10 @@
 
       <!-- ========== MODAL PROMO ========== -->
       <div id="promo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;align-items:center;justify-content:center;padding:20px;">
-        <div style="background:white;border-radius:16px;padding:28px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h3 id="promo-modal-title" style="font-family:'Playfair Display',serif;color:var(--primary);">Nueva Oferta</h3>
-            <button onclick="closePromoModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">✕</button>
+        <div style="background:white;border-radius:16px;padding:28px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--warm);">
+            <h3 id="promo-modal-title" style="font-family:'Playfair Display',serif;color:var(--primary);font-size:1.5rem;margin:0;">Nueva Oferta</h3>
+            <button onclick="closePromoModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">✕</button>
           </div>
           
           <div class="form-group"><label>Título de la oferta *</label><input type="text" id="promo-titulo" placeholder="Ej: ¡2x1 en Galletas!" maxlength="60"></div>
@@ -550,12 +755,21 @@
             </div>
             <div class="form-group">
               <label>Aplica a</label>
-              <select id="promo-aplica">
+              <select id="promo-aplica" onchange="togglePromoAplica()">
                 <option value="todos">Todos los productos</option>
                 <option value="especificos">Productos específicos</option>
                 <option value="categoria">Por categoría</option>
               </select>
             </div>
+          </div>
+
+          <div id="promo-field-categoria" class="form-group" style="display:none;">
+            <label>Categoría</label>
+            <select id="promo-categoria-select"></select>
+          </div>
+          <div id="promo-field-especificos" class="form-group" style="display:none;">
+            <label>Productos incluidos</label>
+            <div id="promo-productos-list" style="display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;padding:10px;background:white;border-radius:8px;border:1px solid var(--warm);"></div>
           </div>
 
           <!-- Campos de valor -->
@@ -584,6 +798,18 @@
             <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
               <input type="checkbox" id="promo-solo-cajas" style="width:18px;height:18px;">
               <label for="promo-solo-cajas" style="margin:0;font-weight:600;font-size:0.85rem;cursor:pointer;">🎁 Solo aplicar a Cajas Personalizadas</label>
+            </div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="promo-solo-nuevos" style="width:18px;height:18px;">
+              <label for="promo-solo-nuevos" style="margin:0;font-weight:600;font-size:0.85rem;cursor:pointer;">⭐ Solo clientes nuevos (1er pedido)</label>
+            </div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="promo-solo-leales" style="width:18px;height:18px;" onchange="document.getElementById('promo-min-pedidos').style.display=this.checked?'block':'none';">
+              <label for="promo-solo-leales" style="margin:0;font-weight:600;font-size:0.85rem;cursor:pointer;">👑 Solo clientes frecuentes/leales</label>
+            </div>
+            <div id="promo-min-pedidos" style="display:none;margin-top:8px;margin-left:28px;">
+              <label style="font-size:0.75rem;font-weight:600;">Mínimo de pedidos para acceder:</label>
+              <input type="number" id="promo-min-pedidos-leales" value="3" min="2" max="100" style="width:100px;padding:8px;border:2px solid var(--warm);border-radius:8px;margin-top:4px;">
             </div>
           </div>
 
@@ -626,7 +852,7 @@
              <div>
                 <div style="display:flex;align-items:center;gap:10px;">
                   <h2 style="font-family:'Playfair Display',serif; color:var(--primary); margin:0;">⚙️ Configuración</h2>
-                  <button class="help-btn" onclick="toggleHelp('config')"></button>
+                  <button class="help-btn" onclick="toggleHelp('config', this)"><span class="dot">i</span>Guía</button>
                 </div>
                 <p style="color:var(--text-muted); font-size: 0.9rem; margin: 5px 0 0;">Personaliza tu tienda y sistema</p>
              </div>
@@ -636,11 +862,12 @@
               <ul>
                 <li><strong>Abrir/Cerrar tienda:</strong> El switch de arriba. Si la tienda está cerrada, los clientes no pueden hacer pedidos</li>
                 <li><strong>Dirección de recogida:</strong> La dirección donde los clientes van a buscar sus pedidos</li>
-                <li><strong>Precios de envío:</strong> Define cuánto cobras por delivery y envío nacional</li>
+                <li><strong>Precios de envío:</strong> Define cuánto cobras por delivery local (San Juan) y envío nacional</li>
+                <li><strong>Zonas de envío nacional:</strong> Si querés cobrar distinto según la provincia o ciudad de destino, agregá esos destinos con su propio precio. Ojo: en cuanto cargás al menos una zona, esa lista pasa a ser cerrada — un destino que no esté en la lista no puede pedir envío nacional (para no cobrar un precio genérico que no cubre el flete real)</li>
                 <li><strong>Teléfono de la tienda:</strong> Se usa para los mensajes de WhatsApp</li>
                 <li><strong>Cuentas bancarias:</strong> Los datos donde los clientes hacen las transferencias</li>
                 <li><strong>Colores:</strong> Personaliza los colores de tu tienda online</li>
-                <li><strong>Email:</strong> Configura el correo para recibir notificaciones automáticas de pedidos</li>
+                <li><strong>Email:</strong> Configura el correo para recibir notificaciones automáticas de pedidos nuevos y las alertas de stock bajo de ingredientes (Inventario → Ingredientes)</li>
                 <li><strong>Mensajes:</strong> Personaliza los mensajes que se envían al cliente en cada estado</li>
                 <li><strong>Administradores:</strong> Agrega o cambia contraseñas de otros administradores</li>
               </ul>
@@ -656,9 +883,9 @@
                </div>
           </div>
 
-          <!-- Sección 1: Tienda y Logística -->
+          <!-- Sección 1: Tienda -->
           <div style="background:white;padding:24px;border-radius:16px;box-shadow:var(--shadow-sm);">
-            <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">🏪 Tienda y Logística</h3>
+            <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">🏪 Tienda</h3>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;">
               <div class="form-group">
                 <label>Nombre de la Tienda</label>
@@ -672,17 +899,35 @@
                 <label>Símbolo de Moneda</label>
                 <input type="text" id="cfg-currency" placeholder="RD$">
               </div>
+            </div>
+          </div>
+
+          <!-- Sección: Envío -->
+          <div style="background:white;padding:24px;border-radius:16px;box-shadow:var(--shadow-sm);">
+            <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">🚚 Envío</h3>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:20px;">
               <div class="form-group">
-                <label>Precio Delivery Local</label>
+                <label>Precio Delivery Local <span style="font-weight:400;color:var(--text-muted);">(San Juan, precio único)</span></label>
                 <input type="number" id="cfg-delivery" placeholder="50">
               </div>
               <div class="form-group">
-                <label>Precio Envío Nacional</label>
+                <label>Precio Envío Nacional <span style="font-weight:400;color:var(--text-muted);">(por defecto, si el destino no tiene zona propia)</span></label>
                 <input type="number" id="cfg-envio" placeholder="100">
               </div>
               <div class="form-group" style="grid-column:1/-1;">
                 <label>Dirección para Pickup</label>
                 <textarea id="cfg-pickup" rows="2" placeholder="Dirección donde los clientes recogerán sus pedidos"></textarea>
+              </div>
+            </div>
+
+            <div style="border-top:1px solid var(--warm);padding-top:18px;">
+              <h4 style="margin:0 0 6px;font-size:0.95rem;color:var(--primary);">📍 Zonas de Envío Nacional</h4>
+              <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:15px;">Cobra distinto según la provincia o ciudad de destino (fuera de San Juan). Si un destino no está en la lista, se usa el "Precio Envío Nacional" de arriba.</p>
+              <div id="envio-zones-list" style="margin-bottom:15px;display:flex;flex-direction:column;gap:10px;"></div>
+              <div style="display:flex;gap:10px;">
+                <button onclick="addEnvioZone()" style="flex:1;padding:12px;background:var(--success);color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer;">+ Añadir Destino</button>
+                <button onclick="saveEnvioZones()" style="flex:1;padding:12px;background:var(--accent);color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer;">💾 Guardar Destinos</button>
               </div>
             </div>
           </div>
@@ -704,7 +949,7 @@
               <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0;border-bottom:none;padding-bottom:0;">💬 Mensajes de WhatsApp</h3>
               <span id="msg-whatsapp-icon" style="font-size:1.2rem;transform:rotate(-90deg);transition:transform 0.3s;">▼</span>
             </div>
-            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:15px;">Personaliza los mensajes automáticos que se envían a los clientes. Usa las variables: <code>{{cliente}}</code>, <code>{{numero}}</code>, <code>{{total}}</code>, <code>{{productos}}</code>, <code>{{tipo_entrega}}</code></p>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:15px;">Personaliza los mensajes automáticos que se envían a los clientes. Usa las variables: <code>{{cliente}}</code>, <code>{{numero}}</code>, <code>{{total}}</code>, <code>{{subtotal}}</code>, <code>{{descuento}}</code>, <code>{{envio}}</code>, <code>{{productos}}</code>, <code>{{tipo_entrega}}</code>, <code>{{pickup_direccion}}</code>, <code>{{entrega_info}}</code> (frase según pickup/delivery/envío), <code>{{cuentas_bancarias}}</code>, <code>{{tracking_url}}</code> (link para que el cliente siga su pedido — no lo quites del mensaje)</p>
             
             <div id="msg-whatsapp-content" style="display:none;gap:20px;">
               <div class="form-group">
@@ -726,6 +971,10 @@
               <div class="form-group">
                 <label>🎉 Mensaje: Entregado</label>
                 <textarea id="cfg-msg-entregado" rows="3" placeholder="Mensaje cuando el pedido ha sido entregado"></textarea>
+              </div>
+              <div class="form-group">
+                <label>❌ Mensaje: Cancelado</label>
+                <textarea id="cfg-msg-cancelado" rows="3" placeholder="Mensaje cuando se cancela el pedido"></textarea>
               </div>
             </div>
             <div style="margin-top:15px;">
@@ -798,44 +1047,6 @@
             </div>
           </div>
 
-          <!-- Sección: Cajas Personalizadas -->
-          <div style="background:white;padding:24px;border-radius:16px;box-shadow:var(--shadow-sm);">
-            <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">📦 Cajas Personalizadas</h3>
-            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">Permite a tus clientes armar su propia caja seleccionando las galletas que quieran.</p>
-
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid var(--warm);">
-              <span style="font-weight:600;">Habilitar Cajas Personalizadas</span>
-              <label class="switch">
-                <input type="checkbox" id="cfg-box-enabled" onchange="saveBoxConfig()">
-                <span class="slider round"></span>
-              </label>
-            </div>
-
-            <div class="form-group">
-              <label>Tamaños disponibles</label>
-              <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
-                  <input type="checkbox" class="box-size-cb" value="6" onchange="saveBoxConfig()"> 6 galletas
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
-                  <input type="checkbox" class="box-size-cb" value="12" onchange="saveBoxConfig()"> 12 galletas
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
-                  <input type="checkbox" class="box-size-cb" value="24" onchange="saveBoxConfig()"> 24 galletas
-                </label>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Productos excluidos (no pueden ir en cajas)</label>
-              <div id="box-excluded-products" style="display:flex;flex-direction:column;gap:6px;max-height:250px;overflow-y:auto;padding:10px;background:var(--cream);border-radius:10px;border:2px solid var(--warm);">
-                <p style="color:#999;font-size:0.85rem;text-align:center;">Cargando productos...</p>
-              </div>
-            </div>
-
-            <button onclick="saveBoxConfig()" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:10px;font-weight:600;cursor:pointer;margin-top:8px;">💾 Guardar Configuración</button>
-          </div>
-
           <!-- Sección 5: Administradores -->
           <div style="background:white;padding:24px;border-radius:16px;box-shadow:var(--shadow-sm);">
             <h3 style="font-family:'Playfair Display',serif;color:var(--primary);margin:0 0 20px;border-bottom:2px solid var(--warm);padding-bottom:10px;">👤 Administradores</h3>
@@ -868,7 +1079,7 @@
         <div style="padding: 20px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
             <span style="font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--primary);">👥 Gestión de Clientes</span>
-            <button class="help-btn" onclick="toggleHelp('clientes')">?</button>
+            <button class="help-btn" onclick="toggleHelp('clientes', this)"><span class="dot">i</span>Guía</button>
           </div>
           <div id="help-clientes" class="help-panel">
             <h4>👥 ¿Cómo usar Clientes?</h4>
@@ -930,9 +1141,12 @@
   </div>
 
   <!-- MODAL: NUEVO CLIENTE -->
-  <div class="modal-overlay" id="new-cliente-modal" style="display:none; background:rgba(0,0,0,0.6);">
-    <div style="background:white; border-radius:16px; max-width:450px; width:95%; padding:24px;">
-      <h3 style="margin:0 0 20px; font-family:'Playfair Display',serif; color:var(--primary);">➕ Nuevo Cliente</h3>
+  <div class="modal-overlay" id="new-cliente-modal" style="display:none; background:rgba(0,0,0,0.6); justify-content:center; align-items:center;">
+    <div style="background:white; border-radius:16px; max-width:500px; width:95%; max-height:90vh; overflow-y:auto; padding:28px; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--warm);">
+        <h3 style="margin:0; font-family:'Playfair Display',serif; color:var(--primary); font-size:1.5rem;">➕ Nuevo Cliente</h3>
+        <button onclick="document.getElementById('new-cliente-modal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">✕</button>
+      </div>
       <div style="display:grid; gap:15px;">
         <div class="form-group">
           <label style="font-weight:600; font-size:0.9rem;">Nombre</label>
@@ -964,10 +1178,10 @@
 
   <!-- MODAL: HISTORIAL DE CLIENTE -->
   <div class="modal-overlay" id="historial-modal" style="display:none; background:rgba(0,0,0,0.6);">
-    <div style="background:white; border-radius:16px; max-width:550px; width:95%; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
-      <div style="padding:20px 24px; background:linear-gradient(135deg, var(--primary), #4a2c20); color:white; display:flex; justify-content:space-between; align-items:center;">
+    <div style="background:white; border-radius:16px; max-width:680px; width:95%; max-height:88vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+      <div style="padding:24px 28px; background:linear-gradient(135deg, var(--primary), #4a2c20); color:white; display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <h3 style="margin:0; font-family:'Playfair Display',serif; font-size:1.3rem;" id="historial-cliente-nombre">Cliente</h3>
+          <h3 style="margin:0; font-family:'Playfair Display',serif; font-size:1.6rem; color:#fff !important;" id="historial-cliente-nombre">Cliente</h3>
           <div style="font-size:0.85rem; opacity:0.9; margin-top:4px;" id="historial-cliente-info"></div>
         </div>
         <button onclick="document.getElementById('historial-modal').style.display='none'" style="background:rgba(255,255,255,0.2); border:none; color:white; font-size:1.2rem; cursor:pointer; width:36px; height:36px; border-radius:50%;">✕</button>
@@ -982,9 +1196,9 @@
 
   <!-- MODAL: DETALLES DEL CLIENTE -->
   <div class="modal-overlay" id="cliente-detalle-modal" style="display:none; background:rgba(0,0,0,0.6);">
-    <div style="background:white; border-radius:16px; max-width:520px; width:95%; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
-      <div style="padding:20px 24px; background:linear-gradient(135deg, var(--primary), #4a2c20); color:white; display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0; font-family:'Playfair Display',serif; font-size:1.3rem;" id="detalle-cliente-nombre">Cliente</h3>
+    <div style="background:white; border-radius:16px; max-width:680px; width:95%; max-height:88vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+      <div style="padding:24px 28px; background:linear-gradient(135deg, var(--primary), #4a2c20); color:white; display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; font-family:'Playfair Display',serif; font-size:1.6rem; color:#fff !important;" id="detalle-cliente-nombre">Cliente</h3>
         <button onclick="document.getElementById('cliente-detalle-modal').style.display='none'" style="background:rgba(255,255,255,0.2); border:none; color:white; font-size:1.2rem; cursor:pointer; width:36px; height:36px; border-radius:50%;">✕</button>
       </div>
       <div style="padding:20px; overflow-y:auto; flex:1; background:var(--cream);" id="detalle-cliente-content"></div>
@@ -998,8 +1212,8 @@
 
   <!-- MODAL: EDITAR CLIENTE -->
   <div class="modal-overlay" id="edit-cliente-modal" style="display:none; background:rgba(0,0,0,0.6); justify-content:center; align-items:center;">
-    <div style="background:white; border-radius:16px; max-width:450px; width:92%; max-height:90vh; overflow-y:auto; padding:24px; margin:10px;">
-      <h3 style="margin:0 0 20px; font-family:'Playfair Display',serif; color:var(--primary);">✏️ Editar Cliente</h3>
+    <div style="background:white; border-radius:16px; max-width:600px; width:94%; max-height:90vh; overflow-y:auto; padding:28px; margin:10px;">
+      <h3 style="margin:0 0 20px; font-family:'Playfair Display',serif; color:var(--primary); font-size:1.5rem;">✏️ Editar Cliente</h3>
       <input type="hidden" id="edit-cliente-id">
       <div style="display:grid; gap:12px;">
         <div class="form-group">
@@ -1108,6 +1322,11 @@
           <div class="form-group"><label>Nombre *</label><input type="text" id="product-name" placeholder="Ej: Galleta Chocolate Chip"></div>
           <div class="form-group"><label>Precio (RD$) *</label><input type="number" id="product-price" placeholder="Ej: 120"></div>
         </div>
+        <div class="form-group">
+          <label>Categoría <span style="font-weight:400;color:var(--text-muted);">(para agrupar en la tienda: Galletas, Bebidas, Postres...)</span></label>
+          <input type="text" id="product-categoria" list="categoria-options" placeholder="Ej: Galletas">
+          <datalist id="categoria-options"></datalist>
+        </div>
         <div class="form-group"><label>Descripción</label><textarea id="product-desc" rows="2" placeholder="Breve descripción del producto"></textarea></div>
         <div class="form-group"><label>Stock <span style="font-weight:400;color:var(--text-muted);">(opcional — vacío = sin control de inventario)</span></label><input type="number" id="product-stock" min="0" placeholder="Ej: 20"></div>
 
@@ -1119,10 +1338,13 @@
               <img id="preview-img" src="" style="width:80px;height:80px;border-radius:10px;object-fit:cover;border:2px solid var(--warm);">
               <button type="button" onclick="removeProductImage()" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--danger);color:white;border:none;font-size:0.8rem;cursor:pointer;line-height:1;">✕</button>
             </div>
-            <div style="border:2px dashed var(--warm);border-radius:10px;padding:14px 20px;text-align:center;cursor:pointer;flex:1;"
-              onclick="document.getElementById('product-image-input').click()">
-              <input type="file" id="product-image-input" accept="image/*" style="display:none;" onchange="handleImageUpload(this)">
-              <span style="color:var(--text-muted);font-size:0.85rem;">📷 Click para subir imagen</span>
+            <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+              <div style="border:2px dashed var(--warm);border-radius:10px;padding:14px 20px;text-align:center;cursor:pointer;"
+                onclick="document.getElementById('product-image-input').click()">
+                <input type="file" id="product-image-input" accept="image/*" style="display:none;" onchange="handleImageUpload(this)">
+                <span style="color:var(--text-muted);font-size:0.85rem;">📷 Click para subir imagen</span>
+              </div>
+              <button type="button" onclick="setProductImageLink()" style="padding:8px 14px;background:white;border:1px solid var(--warm-dark);border-radius:8px;cursor:pointer;font-size:0.82rem;color:var(--text-muted);">🔗 O pegar un link</button>
             </div>
           </div>
         </div>
@@ -1132,17 +1354,11 @@
           <div style="font-weight:700;margin-bottom:16px;color:var(--primary);font-size:1rem;">🎁 Configuración de Caja Personalizable</div>
 
           <div class="form-group">
-            <label>Tamaños disponibles</label>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;background:white;border-radius:8px;border:2px solid var(--warm);">
-                <input type="checkbox" class="box-size-cb" value="6"> 6 galletas
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;background:white;border-radius:8px;border:2px solid var(--warm);">
-                <input type="checkbox" class="box-size-cb" value="12"> 12 galletas
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;background:white;border-radius:8px;border:2px solid var(--warm);">
-                <input type="checkbox" class="box-size-cb" value="24"> 24 galletas
-              </label>
+            <label>Tamaños disponibles <span style="font-weight:400;color:var(--text-muted);">(los que elige el cliente al armar su caja)</span></label>
+            <div id="box-sizes-list" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+            <div style="display:flex;gap:8px;">
+              <input type="number" id="box-size-new" min="1" placeholder="Ej: 18" style="max-width:120px;" onkeypress="if(event.key==='Enter'){event.preventDefault();addBoxSize();}">
+              <button type="button" onclick="addBoxSize()" style="padding:8px 16px;background:var(--success);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap;">+ Agregar tamaño</button>
             </div>
           </div>
 
@@ -1151,6 +1367,26 @@
             <div id="box-allowed-products" style="display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;padding:10px;background:white;border-radius:8px;border:1px solid var(--warm);">
               <p style="color:#999;font-size:0.85rem;text-align:center;">Cargando productos...</p>
             </div>
+          </div>
+        </div>
+
+        <!-- Receta (solo si tipo = producto): siempre se carga por lote (ej:
+             "el lote de 24 galletas lleva 500g de harina"), nunca por pieza
+             suelta — el sistema divide solo para saber cuánto usa cada unidad. -->
+        <div id="receta-fields" style="margin-top:16px;padding:20px;background:var(--cream);border-radius:12px;border:2px solid var(--warm);">
+          <div style="font-weight:700;margin-bottom:6px;color:var(--primary);font-size:1rem;">🧾 Receta (opcional)</div>
+          <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">Cargá la receta tal cual la preparás, <strong>por lote completo</strong> (ej: "el lote de 24 galletas lleva 500g de harina"). Se descuentan solos al vender. Si no cargás nada, el producto se vende igual, simplemente no consume ingredientes.</p>
+          <input type="hidden" id="product-receta">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+            <label style="font-size:0.82rem;color:var(--text-muted);font-weight:600;">Este lote rinde</label>
+            <input type="number" id="receta-lote-rinde" min="1" step="1" placeholder="ej: 24" style="max-width:70px;" oninput="renderRecetaList()">
+            <label style="font-size:0.82rem;color:var(--text-muted);">piezas</label>
+          </div>
+          <div id="receta-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="receta-ingrediente-select" style="flex:1;min-width:150px;"></select>
+            <input type="number" id="receta-cantidad-lote" min="0" step="0.01" placeholder="Cantidad para todo el lote" style="max-width:160px;">
+            <button type="button" onclick="addRecetaLinea()" style="padding:8px 16px;background:var(--success);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap;">+ Agregar</button>
           </div>
         </div>
 

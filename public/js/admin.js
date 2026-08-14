@@ -171,7 +171,7 @@
       try {
         var res = await apiFetch(API_URL + '/api/orders?all=true');
         if (res.ok) orders = await res.json();
-        var pres = await apiFetch(API_URL + '/api/products');
+        var pres = await apiFetch(API_URL + '/api/products?all=1');
         if (pres.ok) products = await pres.json();
         await loadPromos();
         renderDashboard();
@@ -652,6 +652,8 @@
           label.style.color = emailNotifEnabled ? 'var(--success)' : 'var(--danger)';
           
           loadBankAccounts();
+          loadEnvioZones();
+          loadCategoryImages();
           loadMsgTemplates();
         }
       } catch (err) { console.error('Error load config:', err); }
@@ -675,9 +677,10 @@
       icon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
     }
 
-    function toggleHelp(id) {
+    function toggleHelp(id, btn) {
       var panel = document.getElementById('help-' + id);
       if (panel) panel.classList.toggle('show');
+      if (btn) btn.classList.toggle('active', panel && panel.classList.contains('show'));
     }
 
     // Listeners for color pickers
@@ -826,16 +829,91 @@
         } else {
           bankAccounts = data;
         }
-        bankAccounts = bankAccounts.map(function(b) { 
+        bankAccounts = bankAccounts.map(function(b) {
           if (!b.id) b.id = Date.now() + Math.random();
           if (!b.cedula) b.cedula = '';
           return b;
         });
         renderBankAccounts();
-      } catch(e) { 
+      } catch(e) {
         console.error('Error loading bank accounts:', e);
-        bankAccounts = []; 
-        renderBankAccounts(); 
+        bankAccounts = [];
+        renderBankAccounts();
+      }
+    }
+
+    // Zonas de envío nacional: precio configurable por provincia/ciudad de
+    // destino, en vez de una tarifa fija única (el delivery local en San Juan
+    // sí es precio único). Mismo patrón que las cuentas bancarias de arriba.
+    var envioZones = [];
+
+    function addEnvioZone() {
+      envioZones.push({ id: Date.now(), nombre: '', precio: 0 });
+      renderEnvioZones();
+    }
+
+    function removeEnvioZone(id) {
+      envioZones = envioZones.filter(function(z) { return z.id !== id; });
+      renderEnvioZones();
+    }
+
+    function renderEnvioZones() {
+      var container = document.getElementById('envio-zones-list');
+      if (!container) return;
+      if (envioZones.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:16px;">Sin destinos configurados: se usa el precio de envío nacional de arriba para todos.</p>';
+        return;
+      }
+      container.innerHTML = envioZones.map(function(z) {
+        return '<div style="display:grid; grid-template-columns:1fr 140px auto; gap:10px; align-items:end; background:var(--cream); padding:12px 14px; border-radius:10px; border:1px solid var(--warm-dark);">' +
+          '<div class="form-group" style="margin:0;"><label>Provincia / Ciudad</label><input type="text" id="zone-nombre-' + z.id + '" value="' + (z.nombre || '') + '" placeholder="Ej: Santiago"></div>' +
+          '<div class="form-group" style="margin:0;"><label>Precio</label><input type="number" min="0" id="zone-precio-' + z.id + '" value="' + (z.precio || 0) + '"></div>' +
+          '<button onclick="removeEnvioZone(' + z.id + ')" style="padding:8px 14px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; height:38px;">🗑️</button>' +
+        '</div>';
+      }).join('');
+    }
+
+    async function saveEnvioZones() {
+      var zones = envioZones.map(function(z) {
+        return {
+          id: z.id,
+          nombre: document.getElementById('zone-nombre-' + z.id).value.trim(),
+          precio: parseFloat(document.getElementById('zone-precio-' + z.id).value) || 0
+        };
+      }).filter(function(z) { return z.nombre; });
+
+      try {
+        var res = await apiFetch(API_URL + '/api/config', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ envioZones: zones })
+        });
+        var data = await res.json();
+        if (res.ok && data.success) {
+          envioZones = zones;
+          showToast('Destinos de envío guardados ✅', 'success');
+          renderEnvioZones();
+        } else {
+          showToast('Error al guardar: ' + (data.error || 'Desconocido'), 'error');
+        }
+      } catch(err) {
+        showToast('Error de conexión: ' + err.message, 'error');
+      }
+    }
+
+    function loadEnvioZones() {
+      try {
+        var data = currentConfig.envioZones || '[]';
+        envioZones = typeof data === 'string' ? JSON.parse(data) : data;
+        envioZones = envioZones.map(function(z) {
+          if (!z.id) z.id = Date.now() + Math.random();
+          return z;
+        });
+        renderEnvioZones();
+      } catch(e) {
+        console.error('Error loading envio zones:', e);
+        envioZones = [];
+        renderEnvioZones();
       }
     }
     
@@ -861,6 +939,9 @@ Recibimos tu pedido #{{numero}} 🎉
 Por favor, realiza la transferencia y envíame el comprobante aquí.
 Una vez confirmado tu pago, comenzaremos a preparar tu pedido.
 
+📍 *SIGUE TU PEDIDO:*
+{{tracking_url}}
+
 ¡Gracias por tu compra! 🍪`,
       msgPagoConfirmado: `*¡PAGO CONFIRMADO! ✅*
 
@@ -869,18 +950,27 @@ Cliente: {{cliente}}
 
 Tu pago ha sido confirmado. Comenzaremos a preparar tu pedido pronto.
 
+📍 *SIGUE TU PEDIDO:*
+{{tracking_url}}
+
 ¡Te avisaremos cuando esté listo! 🍪`,
       msgPreparando: `*¡TU PEDIDO ESTÁ SIENDO PREPARADO! 🍪*
 
 Pedido #{{numero}}
 Cliente: {{cliente}}
 
-Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo para recoger o entregar. 🎉`,
+Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo para recoger o entregar. 🎉
+
+📍 *SIGUE TU PEDIDO:*
+{{tracking_url}}`,
       msgListo: `🎉 *¡TU PEDIDO ESTÁ LISTO!*
 
 Pedido #{{numero}}
 
-{{pickup_direccion}}
+{{entrega_info}}
+
+📍 *SIGUE TU PEDIDO:*
+{{tracking_url}}
 
 ¡Gracias por tu compra! 🍪`,
       msgEntregado: `*¡PEDIDO ENTREGADO! 🎉*
@@ -907,15 +997,17 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('cfg-msg-preparando').value = currentConfig.msgPreparando || DEFAULT_MSG.msgPreparando;
       document.getElementById('cfg-msg-listo').value = currentConfig.msgListo || DEFAULT_MSG.msgListo;
       document.getElementById('cfg-msg-entregado').value = currentConfig.msgEntregado || DEFAULT_MSG.msgEntregado;
+      document.getElementById('cfg-msg-cancelado').value = currentConfig.msgCancelado || DEFAULT_MSG.msgCancelado;
     }
-    
+
     function saveMsgTemplates() {
       var data = {
         msgEsperandoPago: document.getElementById('cfg-msg-esperando').value,
         msgPagoConfirmado: document.getElementById('cfg-msg-confirmado').value,
         msgPreparando: document.getElementById('cfg-msg-preparando').value,
         msgListo: document.getElementById('cfg-msg-listo').value,
-        msgEntregado: document.getElementById('cfg-msg-entregado').value
+        msgEntregado: document.getElementById('cfg-msg-entregado').value,
+        msgCancelado: document.getElementById('cfg-msg-cancelado').value
       };
       
       apiFetch(API_URL + '/api/config', {
@@ -939,76 +1031,8 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         document.getElementById('cfg-msg-preparando').value = DEFAULT_MSG.msgPreparando;
         document.getElementById('cfg-msg-listo').value = DEFAULT_MSG.msgListo;
         document.getElementById('cfg-msg-entregado').value = DEFAULT_MSG.msgEntregado;
+        document.getElementById('cfg-msg-cancelado').value = DEFAULT_MSG.msgCancelado;
         saveMsgTemplates();
-      }
-    }
-
-    async function loadBoxConfig() {
-      try {
-        var res = await apiFetch(API_URL + '/api/config');
-        if (!res.ok) return;
-        var cfg = await res.json();
-        var boxCfg = cfg.customBoxConfig || { enabled: true, sizes: [6, 12, 24], excludedProducts: [] };
-
-        document.getElementById('cfg-box-enabled').checked = boxCfg.enabled !== false;
-
-        document.querySelectorAll('.box-size-cb').forEach(function(cb) {
-          cb.checked = (boxCfg.sizes || []).indexOf(parseInt(cb.value)) >= 0;
-        });
-
-        // Load products for exclusion list
-        var pres = await apiFetch(API_URL + '/api/products');
-        if (pres.ok) {
-          var prods = await pres.json();
-          var container = document.getElementById('box-excluded-products');
-          container.innerHTML = '';
-          var filtered = prods.filter(function(p) { return p.id != 7; });
-          if (filtered.length === 0) {
-            container.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">No hay productos disponibles</p>';
-          } else {
-            filtered.forEach(function(p) {
-              var excluded = (boxCfg.excludedProducts || []).indexOf(p.id) >= 0;
-              var label = document.createElement('label');
-              label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 10px;border-radius:8px;background:' + (excluded ? '#fee' : 'white') + ';border:1px solid ' + (excluded ? '#ecc' : 'var(--warm)') + ';';
-              label.innerHTML = '<input type="checkbox" class="box-excl-cb" value="' + p.id + '" ' + (excluded ? 'checked' : '') + ' onchange="saveBoxConfig()"> <span style="flex:1;">' + p.nombre + '</span> <span style="color:var(--text-muted);font-size:0.8rem;">RD$' + p.precio + '</span>';
-              container.appendChild(label);
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Error loading box config:', e);
-      }
-    }
-
-    async function saveBoxConfig() {
-      var enabled = document.getElementById('cfg-box-enabled').checked;
-      var sizes = [];
-      document.querySelectorAll('.box-size-cb:checked').forEach(function(cb) { sizes.push(parseInt(cb.value)); });
-      var excludedProducts = [];
-      document.querySelectorAll('.box-excl-cb:checked').forEach(function(cb) { excludedProducts.push(parseInt(cb.value)); });
-
-      var data = {
-        customBoxConfig: {
-          enabled: enabled,
-          sizes: sizes.length > 0 ? sizes : [6],
-          excludedProducts: excludedProducts
-        }
-      };
-
-      try {
-        var res = await apiFetch(API_URL + '/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (res.ok) {
-          showToast('Configuración de cajas guardada ✅', 'success');
-          loadBoxConfig();
-        } else {
-          showToast('Error al guardar', 'error');
-        }
-      } catch (e) {
-        showToast('Error de conexión', 'error');
       }
     }
 
@@ -1178,9 +1202,16 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         if (!res.ok) throw new Error('Error en respuesta');
         orders = await res.json();
 
-        var pres = await apiFetch(API_URL + '/api/products');
+        var pres = await apiFetch(API_URL + '/api/products?all=1');
         if (!pres.ok) throw new Error('Error en productos');
         products = await pres.json();
+
+        // Ingredientes: se cargan acá para que el selector de receta del
+        // modal de producto tenga datos aunque nunca se haya abierto Inventario.
+        try {
+          var ires = await apiFetch(API_URL + '/api/ingredients');
+          if (ires.ok) ingredientsData = await ires.json();
+        } catch (e) {}
 
         // Cargar umbral de inventario para el dashboard
         try {
@@ -1630,6 +1661,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
       // Generar Reporte Contable
       renderAccountingReport(dashOrders);
+      updateDashboardCogs(year, month, day, ventas);
     }
 
     function renderAccountingReport(dashOrders) {
@@ -1679,9 +1711,11 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       html += '<tr style="border-bottom:1px solid #eee; color:#e74c3c;"><td style="padding:8px 0;">(-) Descuentos Otorgados</td><td style="text-align:right; font-weight:600;">-RD$ ' + Math.round(descuentosTotal).toLocaleString() + '</td></tr>';
       html += '<tr style="border-bottom:1px solid #eee;"><td style="padding:8px 0;">(+) Ingresos por Envío</td><td style="text-align:right; font-weight:600;">RD$ ' + Math.round(envioTotal).toLocaleString() + '</td></tr>';
       html += '<tr style="background:var(--cream); font-weight:700;"><td style="padding:12px 0;">= Ventas Netas</td><td style="text-align:right; font-size:1.1rem; color:var(--primary);">RD$ ' + Math.round(ventasNetas).toLocaleString() + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid #eee; color:#e74c3c;"><td style="padding:8px 0;">(-) Costo de Ingredientes <span style="font-weight:400;color:var(--text-muted);font-size:0.8rem;">(según receta de cada producto)</span></td><td id="dash-cogs" style="text-align:right; font-weight:600;">Calculando…</td></tr>';
+      html += '<tr style="background:#e8f5e9; font-weight:700;"><td style="padding:12px 0;">= Ganancia Neta</td><td id="dash-ganancia-neta" style="text-align:right; font-size:1.1rem; color:var(--success);">Calculando…</td></tr>';
       html += '</table>';
       html += '</div>';
-      
+
       // Por Tipo de Entrega
       html += '<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:15px;">';
       html += '<div style="background:var(--cream); padding:16px; border-radius:10px; text-align:center;">';
@@ -1726,6 +1760,42 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       html += '</div>';
       
       document.getElementById('accounting-report').innerHTML = html;
+    }
+
+    // Mismo rango que year/month/day del filtro del Dashboard, en formato
+    // YYYY-MM-DD para consultar el costo de ingredientes de ese período.
+    function getReportDateRange(year, month, day) {
+      if (year && month && day) {
+        var d = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        return { start: d, end: d };
+      }
+      if (year && month) {
+        var y = parseInt(year), m = parseInt(month);
+        var start = y + '-' + String(m).padStart(2, '0') + '-01';
+        var lastDay = new Date(y, m, 0).getDate();
+        return { start: start, end: y + '-' + String(m).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0') };
+      }
+      if (year) return { start: year + '-01-01', end: year + '-12-31' };
+      return { start: '2000-01-01', end: new Date().toISOString().slice(0, 10) };
+    }
+
+    async function updateDashboardCogs(year, month, day, ventasNetas) {
+      var range = getReportDateRange(year, month, day);
+      try {
+        var res = await apiFetch(API_URL + '/api/ingredients/cogs?start=' + range.start + '&end=' + range.end);
+        var data = res.ok ? await res.json() : { costoVentas: 0 };
+        var cogs = data.costoVentas || 0;
+        var ganancia = ventasNetas - cogs;
+        var cogsEl = document.getElementById('dash-cogs');
+        var gananciaEl = document.getElementById('dash-ganancia-neta');
+        if (cogsEl) cogsEl.textContent = '-RD$ ' + Math.round(cogs).toLocaleString();
+        if (gananciaEl) {
+          gananciaEl.textContent = 'RD$ ' + Math.round(ganancia).toLocaleString();
+          gananciaEl.style.color = ganancia >= 0 ? 'var(--success)' : 'var(--danger)';
+        }
+      } catch (e) {
+        console.error('Error cargando costo de ingredientes:', e);
+      }
     }
 
     function exportAccountingReport() {
@@ -1902,45 +1972,162 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       renderOrders();
     }
 
+    function productCardHtml(p) {
+      var imageUrl = p.imagen ? (p.imagen.startsWith('http') ? p.imagen : API_URL + p.imagen) : null;
+      var imageHtml = imageUrl
+        ? '<img src="' + imageUrl + '" class="product-image" alt="' + p.nombre + '" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';">'
+        : '';
+      var placeholderHtml = '<div class="product-image-placeholder" style="' + (imageUrl ? 'display:none;' : '') + '">🍪</div>';
+      var stockHtml = '';
+      if (p.stock !== null && p.stock !== undefined) {
+        if (p.stock <= 0) {
+          stockHtml = '<div style="padding:4px 12px;font-weight:700;color:#c0392b;">⛔ Agotado</div>';
+        } else if (p.stock <= 5) {
+          stockHtml = '<div style="padding:4px 12px;font-weight:700;color:#e67e22;">⚠️ Stock: ' + p.stock + '</div>';
+        } else {
+          stockHtml = '<div style="padding:4px 12px;font-weight:600;color:#27ae60;">📦 Stock: ' + p.stock + '</div>';
+        }
+      }
+      var tipoBadge = '';
+      if (p.tipo === 'caja') {
+        var bc = p.box_config;
+        if (bc && typeof bc === 'string') { try { bc = JSON.parse(bc); } catch(e) { bc = null; } }
+        var sizesStr = bc && bc.sizes ? bc.sizes.join(', ') : '6, 12, 24';
+        tipoBadge = '<div style="font-size:0.75rem;background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-weight:600;margin:4px 0 0;">🎁 Caja (' + sizesStr + ')</div>';
+      }
+      return '<div class="product-card">'
+        + imageHtml + placeholderHtml
+        + '<div class="product-header">'
+        + '<h3>' + p.nombre + '</h3>'
+        + '<div class="product-price">RD$ ' + p.precio.toLocaleString() + '</div>'
+        + tipoBadge
+        + '</div>'
+        + stockHtml
+        + '<div class="product-body"><p class="product-desc">' + (p.descripcion || 'Sin descripcion') + '</p><div class="product-actions"><button class="btn-edit" onclick="editProduct(' + p.id + ')">Editar</button><button class="btn-delete" onclick="confirmDeleteProduct(' + p.id + ')">Eliminar</button></div></div>'
+        + '</div>';
+    }
+
     function renderProducts() {
       var grid = document.getElementById('products-grid');
       var html = '';
-      products.forEach(function (p) {
-        var imageUrl = p.imagen ? (p.imagen.startsWith('http') ? p.imagen : API_URL + p.imagen) : null;
-        var imageHtml = imageUrl 
-          ? '<img src="' + imageUrl + '" class="product-image" alt="' + p.nombre + '" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';">'
-          : '';
-        var placeholderHtml = '<div class="product-image-placeholder" style="' + (imageUrl ? 'display:none;' : '') + '">🍪</div>';
-        var stockHtml = '';
-        if (p.stock !== null && p.stock !== undefined) {
-          if (p.stock <= 0) {
-            stockHtml = '<div style="padding:4px 12px;font-weight:700;color:#c0392b;">⛔ Agotado</div>';
-          } else if (p.stock <= 5) {
-            stockHtml = '<div style="padding:4px 12px;font-weight:700;color:#e67e22;">⚠️ Stock: ' + p.stock + '</div>';
-          } else {
-            stockHtml = '<div style="padding:4px 12px;font-weight:600;color:#27ae60;">📦 Stock: ' + p.stock + '</div>';
-          }
-        }
-        var tipoBadge = '';
-        if (p.tipo === 'caja') {
-          var bc = p.box_config;
-          if (bc && typeof bc === 'string') { try { bc = JSON.parse(bc); } catch(e) { bc = null; } }
-          var sizesStr = bc && bc.sizes ? bc.sizes.join(', ') : '6, 12, 24';
-          tipoBadge = '<div style="font-size:0.75rem;background:#e8f5e9;color:#2e7d32;padding:3px 10px;border-radius:20px;font-weight:600;margin:4px 0 0;">🎁 Caja (' + sizesStr + ')</div>';
-        }
-        html += '<div class="product-card">'
-          + imageHtml + placeholderHtml
-          + '<div class="product-header">'
-          + '<h3>' + p.nombre + '</h3>'
-          + '<div class="product-price">RD$ ' + p.precio.toLocaleString() + '</div>'
-          + tipoBadge
-          + '</div>'
-          + stockHtml
-          + '<div class="product-body"><p class="product-desc">' + (p.descripcion || 'Sin descripcion') + '</p><div class="product-actions"><button class="btn-edit" onclick="editProduct(' + p.id + ')">Editar</button><button class="btn-delete" onclick="confirmDeleteProduct(' + p.id + ')">Eliminar</button></div></div>'
-          + '</div>';
+
+      // Agrupar por categoría (misma lógica que la tienda) para que el admin
+      // vea el catálogo organizado igual que lo ven los clientes.
+      var categorias = [];
+      var porCategoria = {};
+      products.forEach(function(p) {
+        var cat = (p.categoria || 'Galletas').trim() || 'Galletas';
+        if (!porCategoria[cat]) { porCategoria[cat] = []; categorias.push(cat); }
+        porCategoria[cat].push(p);
       });
+      var multiCategoria = categorias.length > 1;
+
+      var savedImages = {};
+      (categoryImages || []).forEach(function(c) { savedImages[c.nombre] = c.imagen; });
+
+      categorias.forEach(function(cat) {
+        if (multiCategoria) {
+          // La caja armable no es un producto que el cliente vea listado como
+          // tal (aparece como tarjeta especial "Arma tu caja"), así que no
+          // cuenta para el número de productos de la categoría.
+          var contables = porCategoria[cat].filter(function(p) { return p.tipo !== 'caja'; }).length;
+          html += categoryHeadingHtml(cat, contables, savedImages[cat] || '');
+        }
+        html += porCategoria[cat].map(productCardHtml).join('');
+      });
+
       html += '<div class="add-product-card" onclick="openProductModal()"><div class="icon">+</div><span>Agregar</span></div>';
       grid.innerHTML = html;
+    }
+
+    // Portada de cada categoría: la foto de fondo que usa la tienda en el home
+    // de categorías. Vive pegada al encabezado de esa categoría en la grilla
+    // (no en una sección aparte) y se guarda sola al subir la foto.
+    var categoryImages = [];
+
+    function loadCategoryImages() {
+      try {
+        var data = currentConfig.categoryImages || '[]';
+        categoryImages = typeof data === 'string' ? JSON.parse(data) : data;
+      } catch (e) {
+        categoryImages = [];
+      }
+    }
+
+    function categoryHeadingHtml(cat, count, img) {
+      var safeId = 'catimg-' + cat.replace(/[^a-zA-Z0-9]/g, '_');
+      return '<div class="products-category-heading">'
+        + '<span class="thumb" id="' + safeId + '-preview" style="background:' + (img ? "url('" + img + "') center/cover" : 'var(--warm)') + ';">' + (img ? '' : '🖼️') + '</span>'
+        + '<span>' + cat + '</span>'
+        + '<span class="count">(' + count + ')</span>'
+        + '<input type="file" accept="image/*" id="' + safeId + '-input" style="display:none;" onchange="handleCategoryImageUpload(this, \'' + cat.replace(/'/g, "\\'") + '\')">'
+        + '<button type="button" class="cover-btn" onclick="document.getElementById(\'' + safeId + '-input\').click()" title="Subir una foto">📷 Subir</button>'
+        + '<button type="button" class="cover-btn" onclick="setCategoryImageLink(\'' + cat.replace(/'/g, "\\'") + '\')" title="Pegar el link de una foto">🔗 Link</button>'
+        + (img ? '<button type="button" class="cover-btn danger" onclick="removeCategoryImage(\'' + cat.replace(/'/g, "\\'") + '\')" title="Quitar portada">✕</button>' : '')
+        + '</div>';
+    }
+
+    async function persistCategoryImages() {
+      try {
+        var res = await apiFetch(API_URL + '/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ categoryImages: categoryImages })
+        });
+        var data = await res.json();
+        if (!res.ok || !data.success) {
+          showToast('Error al guardar portada: ' + (data.error || 'Desconocido'), 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión', 'error');
+      }
+    }
+
+    async function handleCategoryImageUpload(input, cat) {
+      if (!input.files || !input.files[0]) return;
+      var reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          var res = await apiFetch(API_URL + '/api/upload-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imagen: e.target.result, filename: 'categoria_' + cat.replace(/\s+/g, '_') + '.jpg' })
+          });
+          if (res.ok) {
+            var data = await res.json();
+            categoryImages = categoryImages.filter(function(c) { return c.nombre !== cat; });
+            categoryImages.push({ nombre: cat, imagen: data.url });
+            await persistCategoryImages();
+            renderProducts();
+            showToast('Portada de "' + cat + '" actualizada ✅', 'success');
+          } else {
+            showToast('Error subiendo imagen', 'error');
+          }
+        } catch (err) {
+          showToast('Error de conexión', 'error');
+        }
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+
+    async function removeCategoryImage(cat) {
+      categoryImages = categoryImages.filter(function(c) { return c.nombre !== cat; });
+      await persistCategoryImages();
+      renderProducts();
+      showToast('Portada de "' + cat + '" quitada', 'info');
+    }
+
+    async function setCategoryImageLink(cat) {
+      var current = (categoryImages.find(function(c) { return c.nombre === cat; }) || {}).imagen || '';
+      var url = window.prompt('Link de la foto para "' + cat + '":', current);
+      if (url === null) return;
+      url = url.trim();
+      if (!url) { return removeCategoryImage(cat); }
+      categoryImages = categoryImages.filter(function(c) { return c.nombre !== cat; });
+      categoryImages.push({ nombre: cat, imagen: url });
+      await persistCategoryImages();
+      renderProducts();
+      showToast('Portada de "' + cat + '" actualizada ✅', 'success');
     }
 
     function showTab(tab) {
@@ -1974,7 +2161,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       if (tab === 'preparacion') renderPreparacion();
       if (tab === 'promociones') loadPromos();
       if (tab === 'clientes') { clientesPage = 1; loadClientes(); }
-      if (tab === 'config') { loadConfig(); loadBoxConfig(); }
+      if (tab === 'config') loadConfig();
     }
 
     function updatePedidosCounters() {
@@ -2247,12 +2434,12 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
     function confirmDeleteProduct(id) {
       editingProduct = id;
       var p = products.find(function (prod) { return prod.id === id; });
-      if (p && p.tipo === 'caja') {
-        showToast('No puedes eliminar una Caja Personalizada', 'error');
-        return;
-      }
       document.getElementById('confirm-title').textContent = 'Eliminar producto?';
-      document.getElementById('confirm-message').textContent = 'Eliminar este producto?';
+      var msg = 'Eliminar este producto?';
+      if (p && p.tipo === 'caja') {
+        msg = 'Esta es una Caja Personalizada. Si la eliminas, los clientes no podrán armar cajas. ¿Continuar?';
+      }
+      document.getElementById('confirm-message').textContent = msg;
       document.getElementById('confirm-btn').onclick = function () {
         apiFetch(API_URL + '/api/products/' + id, { method: 'DELETE' })
           .then(function (r) {
@@ -2356,6 +2543,17 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         });
       }
       
+      // Link a la página pública donde el cliente ve el estado de su pedido
+      // en cualquier momento, sin depender de que le sigamos escribiendo.
+      var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
+      // Cómo se entrega, en texto — cambia según pickup/delivery/envío para
+      // no decirle a un cliente de envío nacional que "pase a buscarlo".
+      var entregaInfo = tipoEntrega === 'pickup'
+        ? 'Puedes pasar a buscarlo por:\n📍 ' + (currentConfig.pickupAddress || 'nuestra ubicación')
+        : tipoEntrega === 'delivery'
+        ? 'Saldrá pronto hacia tu dirección.'
+        : 'Ha sido enviado. Te llegará en los próximos días.';
+
       // Preparar variables
       var vars = {
         cliente: order.cliente || '',
@@ -2367,7 +2565,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         descuento: (order.descuento || 0).toLocaleString(),
         envio: (order.envio || 0).toLocaleString(),
         pickup_direccion: currentConfig.pickupAddress || 'consultar dirección',
-        cuentas_bancarias: cuentasBancariasMsg
+        cuentas_bancarias: cuentasBancariasMsg,
+        tracking_url: trackingUrl,
+        entrega_info: entregaInfo
       };
       
       // Usar plantilla personalizada o predeterminada
@@ -2409,7 +2609,6 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
             }
           });
         }
-        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡HOLA ' + (order.cliente || '').toUpperCase() + '!*\n' +
           'Recibimos tu pedido #' + String(order.numero).padStart(4, '0') + ' 🎉\n\n' +
@@ -2425,29 +2624,27 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           '*⏳ PRÓXIMO PASO*\n' +
           'Por favor, realiza la transferencia y envíame el comprobante aquí.\n' +
           'Una vez confirmado tu pago, comenzaremos a preparar tu pedido.\n\n' +
-          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Gracias por tu compra! 🍪';
       }
       
       if (nuevoEstado === 'Confirmado') {
-        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡PAGO CONFIRMADO! ✅*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Tu pago ha sido confirmado. Comenzaremos a preparar tu pedido pronto.\n\n' +
-          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Te avisaremos cuando esté listo! 🍪';
       }
 
       if (nuevoEstado === 'Preparando') {
-        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡TU PEDIDO ESTÁ SIENDO PREPARADO! 🍪*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo.\n\n' +
-          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + ' 🎉';
+          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + ' 🎉';
       }
       
       if (nuevoEstado === 'Listo') {
@@ -2456,21 +2653,19 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           : tipoEntrega === 'delivery'
           ? '🎉 *¡TU PEDIDO ESTÁ LISTO!*\n\nSaldrá pronto hacia tu dirección.'
           : '🎉 *¡TU PEDIDO HA SIDO ENVIADO!*\n\nTe llegará en los próximos días.';
-        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' + listoMsg + '\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Gracias por tu compra! 🍪';
       }
 
       if (nuevoEstado === 'Entregado') {
-        var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
         return '🍪 *ESME COOKIES*\n\n' +
           '*¡PEDIDO ENTREGADO! 🎉*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Tu pedido ha sido entregado exitosamente.\n\n' +
-          '*📍 SEGUÍ TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
           '¡Gracias por tu compra! Vuelve pronto 🍪';
       }
       
@@ -2484,85 +2679,6 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       }
       
       return '🍪 *ESME COOKIES*\n\nPedido #' + String(order.numero).padStart(4, '0') + '\nCliente: ' + (order.cliente || '');
-      
-      // Si no hay plantilla personalizada, usar predeterminada
-      // (el resto del código genera mensajes predeterminados)
-
-      if (nuevoEstado === 'Esperando Pago') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡HOLA ' + order.cliente.toUpperCase() + '!*\n' +
-          'Recibimos tu pedido #' + String(order.numero).padStart(4, '0') + ' 🎉\n\n' +
-          '*📋 DATOS DEL PEDIDO*\n' +
-          '─────────────────\n' +
-          '👤 Cliente: ' + order.cliente + '\n' +
-          '🚚 Entrega: ' + tipoTexto + '\n' +
-          '📦 Productos:\n' + prods.replace(/,/g, '\n') + '\n' +
-          '─────────────────\n' +
-          '*💰 TOTAL A PAGAR: RD$ ' + (order.total || 0).toLocaleString() + '*\n' +
-          descuentoInfo +
-          '💳 Forma de pago: ' + (order.pago || 'Por definir') + '\n' +
-          '─────────────────\n' +
-          bankInfo + '\n\n' +
-          '*⏳ PRÓXIMO PASO*\n' +
-          'Por favor, realiza la transferencia y envíame el comprobante aquí.\n' +
-          'Una vez confirmado tu pago, comenzaremos a preparar tu pedido.\n\n' +
-          '¡Gracias por tu compra! 🍪';
-      }
-      
-      if (nuevoEstado === 'Confirmado') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡PAGO CONFIRMADO! ✅*\n\n' +
-          'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          'Cliente: ' + order.cliente + '\n\n' +
-          'Tu pago ha sido confirmado. Comenzaremos a preparar tu pedido pronto.\n\n' +
-          '¡Te avisaremos cuando esté listo! 🍪';
-      }
-
-      if (nuevoEstado === 'Preparando') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡TU PEDIDO ESTÁ SIENDO PREPARADO! 🍪*\n\n' +
-          'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          'Cliente: ' + order.cliente + '\n\n' +
-          'Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo para recoger o entregar. 🎉';
-      }
-      
-      if (nuevoEstado === 'Listo') {
-        var listoMsg = '';
-        if (tipoEntrega === 'pickup') {
-          listoMsg = '🎉 *¡TU PEDIDO ESTÁ LISTO!*\n\nPuedes pasar a buscarlo por:\n📍 ' + (currentConfig.pickupAddress || 'nuestra ubicación');
-        } else if (tipoEntrega === 'delivery') {
-          listoMsg = '🎉 *¡TU PEDIDO ESTÁ LISTO!*\n\nSaldrá pronto hacia tu dirección. El delivery llegará en las próximas horas.';
-        } else {
-          listoMsg = '🎉 *¡TU PEDIDO HA SIDO ENVIADO!*\n\nTe llegará en los próximos días. Recibe tu pedido en la comodidad de tu hogar.';
-        }
-        return '🍪 *ESME COOKIES*\n\n' + listoMsg + '\n\n' +
-          'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          '¡Gracias por tu compra! 🍪';
-      }
-
-      if (nuevoEstado === 'Entregado') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡PEDIDO ENTREGADO! 🎉*\n\n' +
-          'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          'Cliente: ' + order.cliente + '\n\n' +
-          'Tu pedido ha sido entregado exitosamente.\n\n' +
-          '¡Gracias por tu compra! Vuelve pronto 🍪';
-      }
-      
-      if (nuevoEstado === 'Cancelado') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*PEDIDO CANCELADO*\n\n' +
-          'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          'Cliente: ' + order.cliente + '\n\n' +
-          'Este pedido ha sido cancelado.\n\n' +
-          'Si tienes alguna pregunta, respondeme a este mensaje.';
-      }
-
-      return '🍪 *ESME COOKIES*\n\n' +
-        'Pedido: #' + String(order.numero).padStart(4, '0') + '\n' +
-        'Cliente: ' + order.cliente + '\n' +
-        'Estado: ' + (nuevoEstado || order.estado) + '\n' +
-        'Total: RD$ ' + (order.total || 0).toLocaleString();
     }
 
     async function sendConfirmation(numero) {
@@ -2727,16 +2843,109 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
     function toggleProductTipo() {
       var tipo = document.querySelector('input[name="product-tipo"]:checked');
-      document.getElementById('box-config-fields').style.display = tipo && tipo.value === 'caja' ? 'block' : 'none';
-      if (tipo && tipo.value === 'caja') loadBoxAllowedProducts();
+      var esCaja = tipo && tipo.value === 'caja';
+      document.getElementById('box-config-fields').style.display = esCaja ? 'block' : 'none';
+      document.getElementById('receta-fields').style.display = esCaja ? 'none' : 'block';
+      if (esCaja) loadBoxAllowedProducts();
+    }
+
+    // Receta: siempre por lote completo (ej. "el lote de 24 galletas lleva
+    // 500g de harina"), nunca por pieza suelta — así el admin la carga tal
+    // cual la prepara, sin tener que dividir a mano. recetaEditing guarda la
+    // cantidad POR LOTE de cada ingrediente; el "por unidad" se calcula solo
+    // para mostrar, y recién se divide al guardar (ver saveProduct).
+    var recetaEditing = [];
+
+    function populateRecetaIngredientSelect() {
+      var select = document.getElementById('receta-ingrediente-select');
+      if (!select) return;
+      if (!ingredientsData.length) {
+        select.innerHTML = '<option value="">Sin ingredientes cargados (Inventario → Ingredientes)</option>';
+        return;
+      }
+      select.innerHTML = ingredientsData.map(function(i) {
+        return '<option value="' + i.id + '">' + i.nombre + ' (' + i.unidad + ')</option>';
+      }).join('');
+    }
+
+    function renderRecetaList() {
+      var container = document.getElementById('receta-list');
+      if (!container) return;
+      var rinde = parseFloat(document.getElementById('receta-lote-rinde').value) || 0;
+      if (recetaEditing.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Sin ingredientes en la receta todavía.</p>';
+        return;
+      }
+      container.innerHTML = recetaEditing.map(function(linea) {
+        var ing = ingredientsData.find(function(i) { return i.id === linea.ingrediente_id; });
+        var nombre = ing ? ing.nombre : 'Ingrediente #' + linea.ingrediente_id;
+        var unidad = ing ? ing.unidad : '';
+        var porUnidad = rinde > 0 ? ' <span style="color:var(--text-muted);font-weight:400;">(' + (linea.cantidad / rinde).toFixed(4) + ' ' + unidad + ' c/u)</span>' : '';
+        return '<div style="display:flex;align-items:center;gap:10px;background:white;padding:8px 12px;border-radius:8px;border:1px solid var(--warm);">'
+          + '<span style="flex:1;">' + nombre + '</span>'
+          + '<strong>' + linea.cantidad + ' ' + unidad + ' / lote' + porUnidad + '</strong>'
+          + '<button type="button" onclick="removeRecetaLinea(' + linea.ingrediente_id + ')" style="width:22px;height:22px;border-radius:50%;border:none;background:var(--danger);color:white;cursor:pointer;font-size:0.75rem;line-height:1;">✕</button>'
+          + '</div>';
+      }).join('');
+    }
+
+    function addRecetaLinea() {
+      var rinde = parseFloat(document.getElementById('receta-lote-rinde').value);
+      if (!rinde || rinde <= 0) { showToast('Primero decí cuántas piezas rinde el lote', 'error'); return; }
+      var select = document.getElementById('receta-ingrediente-select');
+      var ingredienteId = parseInt(select.value);
+      var cantidad = parseFloat(document.getElementById('receta-cantidad-lote').value);
+      if (!ingredienteId) { showToast('Cargá un ingrediente primero (Inventario → Ingredientes)', 'error'); return; }
+      if (!cantidad || cantidad <= 0) { showToast('Ingresa una cantidad válida', 'error'); return; }
+      recetaEditing = recetaEditing.filter(function(l) { return l.ingrediente_id !== ingredienteId; });
+      recetaEditing.push({ ingrediente_id: ingredienteId, cantidad: cantidad });
+      renderRecetaList();
+      document.getElementById('receta-cantidad-lote').value = '';
+    }
+
+    function removeRecetaLinea(ingredienteId) {
+      recetaEditing = recetaEditing.filter(function(l) { return l.ingrediente_id !== ingredienteId; });
+      renderRecetaList();
+    }
+
+    // Tamaños de caja: lista editable en vez de 3 opciones fijas (6/12/24).
+    var boxSizesEditing = [6, 12, 24];
+
+    function renderBoxSizesList() {
+      var container = document.getElementById('box-sizes-list');
+      if (!container) return;
+      container.innerHTML = boxSizesEditing.map(function(n) {
+        return '<span style="display:inline-flex;align-items:center;gap:6px;padding:8px 10px 8px 16px;background:white;border:2px solid var(--warm);border-radius:20px;font-weight:600;">'
+          + n + ' galletas'
+          + '<button type="button" onclick="removeBoxSize(' + n + ')" title="Quitar" style="width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:white;cursor:pointer;font-size:0.75rem;line-height:1;">✕</button>'
+          + '</span>';
+      }).join('') || '<span style="color:var(--text-muted);font-size:0.85rem;">Agregá al menos un tamaño</span>';
+    }
+
+    function addBoxSize() {
+      var input = document.getElementById('box-size-new');
+      var n = parseInt(input.value);
+      if (!n || n <= 0) { showToast('Ingresa un número válido', 'error'); return; }
+      if (boxSizesEditing.indexOf(n) === -1) {
+        boxSizesEditing.push(n);
+        boxSizesEditing.sort(function(a, b) { return a - b; });
+        renderBoxSizesList();
+      }
+      input.value = '';
+      input.focus();
+    }
+
+    function removeBoxSize(n) {
+      boxSizesEditing = boxSizesEditing.filter(function(s) { return s !== n; });
+      renderBoxSizesList();
     }
 
     function loadBoxAllowedProducts() {
       var container = document.getElementById('box-allowed-products');
-      apiFetch(API_URL + '/api/products').then(function(res) {
+      apiFetch(API_URL + '/api/products?all=1').then(function(res) {
         if (!res.ok) return;
         res.json().then(function(prods) {
-          var filtered = prods.filter(function(p) { return p.id != 7 && p.tipo !== 'caja'; });
+          var filtered = prods.filter(function(p) { return p.tipo !== 'caja'; });
           if (filtered.length === 0) {
             container.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">No hay productos disponibles</p>';
             return;
@@ -2747,10 +2956,23 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           if (boxConfigStr) {
             try { var bc = JSON.parse(boxConfigStr); currentAllowed = bc.allowedProducts || []; } catch(e) {}
           }
-          container.innerHTML = filtered.map(function(p) {
-            var checked = currentAllowed.indexOf(p.id) >= 0;
-            return '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 6px;border-radius:4px;background:' + (checked ? '#e8f5e9' : 'white') + ';border:1px solid ' + (checked ? '#a5d6a7' : '#eee') + ';">' +
-              '<input type="checkbox" class="box-allowed-cb" value="' + p.id + '" ' + (checked ? 'checked' : '') + ' style="margin:0;width:14px;height:14px;"> <span style="flex:1;font-size:0.85rem;line-height:1.3;">' + p.nombre + '</span> <span style="color:#999;font-size:0.75rem;">RD$' + p.precio + '</span></label>';
+          // Separados por categoría para encontrar rápido en catálogos grandes.
+          var categorias = [];
+          var porCategoria = {};
+          filtered.forEach(function(p) {
+            var cat = (p.categoria || 'Galletas').trim() || 'Galletas';
+            if (!porCategoria[cat]) { porCategoria[cat] = []; categorias.push(cat); }
+            porCategoria[cat].push(p);
+          });
+          var multiCategoria = categorias.length > 1;
+          container.innerHTML = categorias.map(function(cat) {
+            var itemsHtml = porCategoria[cat].map(function(p) {
+              var checked = currentAllowed.indexOf(p.id) >= 0;
+              return '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 6px;border-radius:4px;background:' + (checked ? '#e8f5e9' : 'white') + ';border:1px solid ' + (checked ? '#a5d6a7' : '#eee') + ';">' +
+                '<input type="checkbox" class="box-allowed-cb" value="' + p.id + '" ' + (checked ? 'checked' : '') + ' style="margin:0;width:14px;height:14px;"> <span style="flex:1;font-size:0.85rem;line-height:1.3;">' + p.nombre + '</span> <span style="color:#999;font-size:0.75rem;">RD$' + p.precio + '</span></label>';
+            }).join('');
+            var heading = multiCategoria ? '<div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;margin:6px 0 2px;">' + cat + '</div>' : '';
+            return heading + itemsHtml;
           }).join('');
         });
       }).catch(function() { container.innerHTML = '<p style="color:#999;font-size:0.85rem;">Error al cargar</p>'; });
@@ -2761,7 +2983,12 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('product-modal-title').textContent = id ? 'Editar Producto' : 'Nuevo Producto';
       document.getElementById('product-name').value = '';
       document.getElementById('product-price').value = '';
+      document.getElementById('product-categoria').value = '';
       document.getElementById('product-desc').value = '';
+
+      var categoriaOptions = document.getElementById('categoria-options');
+      var categoriasExistentes = Array.from(new Set(products.map(function(p) { return (p.categoria || '').trim(); }).filter(Boolean)));
+      categoriaOptions.innerHTML = categoriasExistentes.map(function(c) { return '<option value="' + c + '">'; }).join('');
       document.getElementById('product-stock').value = '';
       document.getElementById('product-image').value = '';
       document.getElementById('product-image-preview').style.display = 'none';
@@ -2769,12 +2996,21 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('product-box-config').value = '';
       document.getElementById('box-config-fields').style.display = 'none';
       document.querySelector('input[name="product-tipo"][value="producto"]').checked = true;
+      boxSizesEditing = [6, 12, 24];
+      renderBoxSizesList();
+      document.getElementById('receta-fields').style.display = 'block';
+      document.getElementById('product-receta').value = '';
+      document.getElementById('receta-lote-rinde').value = '';
+      recetaEditing = [];
+      populateRecetaIngredientSelect();
+      renderRecetaList();
 
       if (id) {
         var p = products.find(function (prod) { return prod.id === id; });
         if (p) {
           document.getElementById('product-name').value = p.nombre;
           document.getElementById('product-price').value = p.precio;
+          document.getElementById('product-categoria').value = p.categoria || '';
           document.getElementById('product-desc').value = p.descripcion || '';
           document.getElementById('product-stock').value = (p.stock === null || p.stock === undefined) ? '' : p.stock;
           if (p.imagen) {
@@ -2789,15 +3025,24 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
             document.getElementById('box-config-fields').style.display = 'block';
             var bc = p.box_config;
             if (bc && typeof bc === 'string') { try { bc = JSON.parse(bc); } catch(e) { bc = null; } }
-            if (bc && bc.sizes) {
-              document.querySelectorAll('#box-config-fields .box-size-cb').forEach(function(cb) {
-                cb.checked = bc.sizes.indexOf(parseInt(cb.value)) >= 0;
-              });
-            } else {
-              document.querySelectorAll('#box-config-fields .box-size-cb').forEach(function(cb) { cb.checked = true; });
-            }
+            boxSizesEditing = (bc && Array.isArray(bc.sizes) && bc.sizes.length) ? bc.sizes.slice().sort(function(a, b) { return a - b; }) : [6, 12, 24];
+            renderBoxSizesList();
             document.getElementById('product-box-config').value = JSON.stringify(bc || { sizes: [6, 12, 24], allowedProducts: [] });
             loadBoxAllowedProducts();
+          } else {
+            var receta = p.receta;
+            if (receta && typeof receta === 'string') { try { receta = JSON.parse(receta); } catch(e) { receta = []; } }
+            if (Array.isArray(receta)) {
+              // Formato viejo (cantidad ya por unidad) = lote de 1 pieza, mismo resultado.
+              document.getElementById('receta-lote-rinde').value = 1;
+              recetaEditing = receta;
+            } else if (receta && Array.isArray(receta.lineas)) {
+              document.getElementById('receta-lote-rinde').value = receta.rinde || 1;
+              recetaEditing = receta.lineas;
+            } else {
+              recetaEditing = [];
+            }
+            renderRecetaList();
           }
         }
       }
@@ -2822,6 +3067,18 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('product-image-preview').style.display = 'none';
       document.getElementById('preview-img').src = '';
       document.getElementById('product-image-input').value = '';
+    }
+
+    function setProductImageLink() {
+      var current = document.getElementById('product-image').value;
+      if (current && current.startsWith('data:')) current = '';
+      var url = window.prompt('Link de la imagen del producto:', current || '');
+      if (url === null) return;
+      url = url.trim();
+      if (!url) { removeProductImage(); return; }
+      document.getElementById('product-image').value = url;
+      document.getElementById('preview-img').src = url;
+      document.getElementById('product-image-preview').style.display = 'block';
     }
 
     function closeProductModal() {
@@ -2866,14 +3123,16 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         // Build box config
         var boxConfig = null;
         if (tipoVal === 'caja') {
-          var sizes = [];
-          document.querySelectorAll('#box-config-fields .box-size-cb:checked').forEach(function(cb) { sizes.push(parseInt(cb.value)); });
+          var sizes = boxSizesEditing.slice();
           var allowedProducts = [];
           document.querySelectorAll('.box-allowed-cb:checked').forEach(function(cb) { allowedProducts.push(parseInt(cb.value)); });
           boxConfig = { sizes: sizes.length > 0 ? sizes : [6], allowedProducts: allowedProducts };
         }
 
-        var productData = { nombre: nombre, precio: precio, descripcion: descripcion, imagen: imagen, stock: stockInput, tipo: tipoVal, box_config: boxConfig };
+        var categoria = document.getElementById('product-categoria').value.trim();
+        var loteRinde = parseFloat(document.getElementById('receta-lote-rinde').value) || 1;
+        var receta = (tipoVal === 'caja' || recetaEditing.length === 0) ? [] : { rinde: loteRinde, lineas: recetaEditing };
+        var productData = { nombre: nombre, precio: precio, descripcion: descripcion, imagen: imagen, stock: stockInput, tipo: tipoVal, box_config: boxConfig, categoria: categoria, receta: receta };
 
         var url = editingProduct ? API_URL + '/api/products/' + editingProduct : API_URL + '/api/products';
         var method = editingProduct ? 'PUT' : 'POST';
@@ -3005,6 +3264,9 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
           + '<span style="font-weight:700;color:var(--primary);font-size:1.05rem;">' + p.titulo + '</span>'
           + '<span style="padding:2px 8px;background:' + p.color + '20;color:' + p.color + ';border-radius:20px;font-size:0.7rem;font-weight:600;">' + (tipoLabels[p.tipo] || p.tipo) + '</span>'
+          + (p.solo_clientes_nuevos ? '<span style="padding:2px 8px;background:#e8f5e9;color:#2e7d32;border-radius:20px;font-size:0.7rem;font-weight:600;">⭐ Nuevos</span>' : '')
+          + (p.solo_clientes_leales ? '<span style="padding:2px 8px;background:#fff3e0;color:#e65100;border-radius:20px;font-size:0.7rem;font-weight:600;">👑 Leales (' + (p.min_pedidos_leal || 3) + '+)</span>' : '')
+          + (p.solo_cajas ? '<span style="padding:2px 8px;background:#fce4ec;color:#c2185b;border-radius:20px;font-size:0.7rem;font-weight:600;">🎁 Cajas</span>' : '')
           + statusLabel
           + '</div>'
           + (p.descripcion ? '<div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">' + p.descripcion + '</div>' : '')
@@ -3026,6 +3288,54 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('promo-field-fijo').style.display = (tipo === 'descuento_fijo') ? 'block' : 'none';
     }
 
+    // "Aplica a" necesita decir A QUÉ categoría o A QUÉ productos, si no el
+    // descuento no tiene forma de saber a qué limitarse y termina aplicando
+    // a todo el carrito igual (ver evaluarPromociones en el servidor).
+    function togglePromoAplica(selectedCategoria, selectedIds) {
+      var aplica = document.getElementById('promo-aplica').value;
+      document.getElementById('promo-field-categoria').style.display = (aplica === 'categoria') ? 'block' : 'none';
+      document.getElementById('promo-field-especificos').style.display = (aplica === 'especificos') ? 'block' : 'none';
+      if (aplica === 'categoria') loadPromoCategoriaSelect(selectedCategoria);
+      if (aplica === 'especificos') loadPromoProductsList(selectedIds);
+    }
+
+    function loadPromoCategoriaSelect(selected) {
+      var select = document.getElementById('promo-categoria-select');
+      var categorias = Array.from(new Set(products.map(function(p) { return (p.categoria || '').trim(); }).filter(Boolean)));
+      if (categorias.length === 0) {
+        select.innerHTML = '<option value="">Sin categorías cargadas todavía</option>';
+        return;
+      }
+      select.innerHTML = categorias.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+      if (selected) select.value = selected;
+    }
+
+    function loadPromoProductsList(selectedIds) {
+      var container = document.getElementById('promo-productos-list');
+      var filtered = products.filter(function(p) { return p.tipo !== 'caja'; });
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="color:#999;font-size:0.85rem;text-align:center;">No hay productos disponibles</p>';
+        return;
+      }
+      var categorias = [];
+      var porCategoria = {};
+      filtered.forEach(function(p) {
+        var cat = (p.categoria || 'Galletas').trim() || 'Galletas';
+        if (!porCategoria[cat]) { porCategoria[cat] = []; categorias.push(cat); }
+        porCategoria[cat].push(p);
+      });
+      var multiCategoria = categorias.length > 1;
+      container.innerHTML = categorias.map(function(cat) {
+        var itemsHtml = porCategoria[cat].map(function(p) {
+          var checked = Array.isArray(selectedIds) && selectedIds.indexOf(p.id) >= 0;
+          return '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 6px;border-radius:4px;background:' + (checked ? '#e8f5e9' : 'white') + ';border:1px solid ' + (checked ? '#a5d6a7' : '#eee') + ';">' +
+            '<input type="checkbox" class="promo-producto-cb" value="' + p.id + '" ' + (checked ? 'checked' : '') + ' style="margin:0;width:14px;height:14px;"> <span style="flex:1;font-size:0.85rem;line-height:1.3;">' + p.nombre + '</span> <span style="color:#999;font-size:0.75rem;">RD$' + p.precio + '</span></label>';
+        }).join('');
+        var heading = multiCategoria ? '<div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;margin:6px 0 2px;">' + cat + '</div>' : '';
+        return heading + itemsHtml;
+      }).join('');
+    }
+
     function openPromoModal(id) {
       editingPromo = id || null;
       document.getElementById('promo-modal-title').textContent = id ? 'Editar Oferta' : 'Nueva Oferta';
@@ -3041,8 +3351,13 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('promo-orden').value = '0';
       document.getElementById('promo-activa').checked = true;
       document.getElementById('promo-solo-cajas').checked = false;
+      document.getElementById('promo-solo-nuevos').checked = false;
+      document.getElementById('promo-solo-leales').checked = false;
+      document.getElementById('promo-min-pedidos-leales').value = '3';
+      document.getElementById('promo-min-pedidos').style.display = 'none';
       togglePromoFields();
-      
+      togglePromoAplica();
+
       // Si es edición, cargar datos existentes
       if (id) {
         var promo = promos.find(function(p) { return p.id === id; });
@@ -3065,7 +3380,14 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           document.getElementById('promo-hora-fin').value = promo.hora_fin || '';
           document.getElementById('promo-activa').checked = promo.activa == 1;
           document.getElementById('promo-solo-cajas').checked = promo.solo_cajas == 1;
+          document.getElementById('promo-solo-nuevos').checked = promo.solo_clientes_nuevos == 1;
+          document.getElementById('promo-solo-leales').checked = promo.solo_clientes_leales == 1;
+          document.getElementById('promo-min-pedidos-leales').value = promo.min_pedidos_leal || 3;
+          document.getElementById('promo-min-pedidos').style.display = (promo.solo_clientes_leales == 1) ? 'block' : 'none';
           togglePromoFields();
+          var productosIds = [];
+          if (promo.productos_ids) { try { productosIds = JSON.parse(promo.productos_ids); } catch(e) {} }
+          togglePromoAplica(promo.categoria, productosIds);
         }
       }
       
@@ -3081,11 +3403,21 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var titulo = document.getElementById('promo-titulo').value.trim();
       if (!titulo) { showToast('El título es requerido', 'error'); return; }
       var tipo = document.getElementById('promo-tipo').value;
+      var aplicaA = document.getElementById('promo-aplica').value;
+      var productosIdsChecked = Array.from(document.querySelectorAll('.promo-producto-cb:checked')).map(function(cb) { return parseInt(cb.value); });
+      if (aplicaA === 'categoria' && !document.getElementById('promo-categoria-select').value) {
+        showToast('Elegí a qué categoría aplica', 'error'); return;
+      }
+      if (aplicaA === 'especificos' && productosIdsChecked.length === 0) {
+        showToast('Marcá al menos un producto', 'error'); return;
+      }
       var data = {
         titulo: titulo,
         descripcion: document.getElementById('promo-desc').value.trim(),
         tipo: tipo,
-        aplica_a: document.getElementById('promo-aplica').value,
+        aplica_a: aplicaA,
+        categoria: document.getElementById('promo-categoria-select').value || 'todos',
+        productos_ids: JSON.stringify(productosIdsChecked),
         descuento_pct: (parseFloat(document.getElementById('promo-pct').value) || 0),
         descuento_fijo: (parseFloat(document.getElementById('promo-fijo').value) || 0),
         compra_minima: (parseFloat(document.getElementById('promo-minimo').value) || 0),
@@ -3099,7 +3431,10 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         hora_inicio: document.getElementById('promo-hora-inicio').value,
         hora_fin: document.getElementById('promo-hora-fin').value,
     activa: document.getElementById('promo-activa').checked,
-    solo_cajas: document.getElementById('promo-solo-cajas').checked ? 1 : 0
+    solo_cajas: document.getElementById('promo-solo-cajas').checked ? 1 : 0,
+    solo_clientes_nuevos: document.getElementById('promo-solo-nuevos').checked ? 1 : 0,
+    solo_clientes_leales: document.getElementById('promo-solo-leales').checked ? 1 : 0,
+    min_pedidos_leal: parseInt(document.getElementById('promo-min-pedidos-leales').value) || 3
   };
       try {
         var url = editingPromo ? API_URL + '/api/promociones/' + editingPromo : API_URL + '/api/promociones';
@@ -3842,7 +4177,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var totalUnidades = conStock.reduce(function(s, p) { return s + p.stock; }, 0);
       var invHtml = '';
       if (conStock.length === 0) {
-        invHtml = '<p style="color:var(--text-muted);">Ningún producto tiene control de stock. Asigná un stock a un producto en la pestaña Productos para verlo acá.</p>';
+        invHtml = '<p style="color:var(--text-muted);">Ningún producto tiene control de stock. Asigna un stock a un producto en la pestaña Productos para verlo aquí.</p>';
       } else {
         invHtml += '<div style="display:flex; gap:10px; margin-bottom:14px;">';
         invHtml += '<div style="flex:1; text-align:center; background:#e8f5e9; border-radius:10px; padding:10px;"><div style="font-size:1.6rem; font-weight:700; color:var(--success);">' + totalUnidades + '</div><div style="font-size:0.8rem; color:var(--success);">Unidades</div></div>';
@@ -3866,6 +4201,21 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
     // ====== INVENTARIO ======
     var inventoryData = [];
 
+    // Alterna entre stock de productos e ingredientes en vez de apilar todo
+    // en una sola página larga (con muchos productos, llegar a Ingredientes
+    // significaba scrollear de más).
+    function setInventarioView(view) {
+      var esProductos = view === 'productos';
+      document.getElementById('inv-productos-section').style.display = esProductos ? 'block' : 'none';
+      document.getElementById('inv-ingredientes-section').style.display = esProductos ? 'none' : 'block';
+      var btnProd = document.getElementById('inv-view-btn-productos');
+      var btnIng = document.getElementById('inv-view-btn-ingredientes');
+      btnProd.style.background = esProductos ? 'var(--accent)' : 'white';
+      btnProd.style.color = esProductos ? 'white' : 'var(--primary)';
+      btnIng.style.background = !esProductos ? 'var(--accent)' : 'white';
+      btnIng.style.color = !esProductos ? 'white' : 'var(--primary)';
+    }
+
     function renderInventario() {
       apiFetch('/api/inventory')
         .then(function(r) { return r.ok ? r.json() : []; })
@@ -3878,6 +4228,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           renderMovements();
         })
         .catch(function(e) { console.error('Error loading inventory:', e); });
+      renderIngredientes();
     }
 
     function renderInventoryTable() {
@@ -3989,7 +4340,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var tipo = document.getElementById('adjust-tipo').value;
       var cantidad = parseInt(document.getElementById('adjust-cantidad').value) || 1;
       var motivo = document.getElementById('adjust-motivo').value;
-      if (!productoId) { showToast('Seleccioná un producto', 'error'); return; }
+      if (!productoId) { showToast('Selecciona un producto', 'error'); return; }
       apiFetch('/api/inventory/adjust', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4073,6 +4424,332 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
     function setText(id, val) {
       var el = document.getElementById(id);
       if (el) el.textContent = val;
+    }
+
+    // ========== INGREDIENTES (materia prima) ==========
+    var ingredientsData = [];
+
+    function renderIngredientes() {
+      apiFetch(API_URL + '/api/ingredients')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(data) {
+          ingredientsData = Array.isArray(data) ? data : [];
+          renderIngredientsTable();
+          loadIngredientsSummary();
+          renderIngredientMovements();
+        })
+        .catch(function(e) { console.error('Error loading ingredients:', e); });
+    }
+
+    function loadIngredientsSummary() {
+      apiFetch(API_URL + '/api/ingredients/summary')
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(s) {
+          if (!s || s.error) return;
+          setText('ing-total', s.totalIngredientes);
+          setText('ing-bajo', s.stockBajo);
+          setText('ing-inversion', 'RD$' + (s.inversionTotal || 0).toLocaleString());
+        })
+        .catch(function(e) { console.error('Error loading ingredients summary:', e); });
+    }
+
+    function renderIngredientsTable() {
+      var tbody = document.getElementById('ing-tbody');
+      var empty = document.getElementById('ing-empty');
+      if (!tbody) return;
+
+      if (ingredientsData.length === 0) {
+        tbody.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+
+      var html = '';
+      ingredientsData.forEach(function(i) {
+        var bajo = i.stock <= i.stock_minimo;
+        var estadoClass = i.stock <= 0 ? 'var(--danger)' : bajo ? 'var(--warning)' : 'var(--success)';
+        var estadoText = i.stock <= 0 ? '⛔ Agotado' : bajo ? '⚠️ Bajo' : '✅ Ok';
+        html += '<tr style="border-bottom:1px solid var(--warm);">';
+        html += '<td style="padding:12px 16px; font-weight:600;">' + i.nombre + '</td>';
+        // Con tamaño de paquete cargado, lo que el admin cuenta de verdad son
+        // paquetes ("tengo 2 fundas y media"), no gramos sueltos — el gramaje
+        // ya tiene su propia columna (Medida), no hace falta repetirlo acá.
+        var stockCelda = i.tamano_paquete > 0
+          ? (i.stock / i.tamano_paquete).toFixed(1) + ' paq.'
+          : i.stock + ' ' + i.unidad;
+        var medidaCelda = i.tamano_paquete > 0
+          ? i.tamano_paquete + ' ' + i.unidad + '/paq.'
+          : '<span style="color:var(--text-muted);font-size:0.8rem;">—</span>';
+        html += '<td style="padding:12px 16px; text-align:center; font-weight:700;">' + stockCelda + '</td>';
+        html += '<td style="padding:12px 16px; text-align:center;">' + medidaCelda + '</td>';
+        html += '<td style="padding:12px 16px; text-align:center;">RD$' + (Number(i.costo_unitario) || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + ' / ' + i.unidad + '</td>';
+        html += '<td style="padding:12px 16px; text-align:center;"><span style="color:' + estadoClass + '; font-weight:600;">' + estadoText + '</span></td>';
+        html += '<td style="padding:12px 16px; text-align:right;">';
+        html += '<div style="display:flex; gap:6px; justify-content:flex-end;">';
+        html += '<button onclick="openIngredientMoveModal(' + i.id + ')" style="padding:4px 10px; background:var(--accent); color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.8rem;" title="Reabastecer / Ajustar">📥</button>';
+        html += '<button onclick="openIngredientModal(' + i.id + ')" style="padding:4px 10px; background:var(--warm-dark); color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.8rem;" title="Editar">✏️</button>';
+        html += '<button onclick="confirmDeleteIngredient(' + i.id + ')" style="padding:4px 10px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.8rem;" title="Eliminar">🗑️</button>';
+        html += '</div></td></tr>';
+      });
+      tbody.innerHTML = html;
+    }
+
+    function renderIngredientMovements() {
+      var container = document.getElementById('ing-movements-list');
+      if (!container) return;
+      apiFetch(API_URL + '/api/ingredients/movements?limit=50')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(movements) {
+          if (!Array.isArray(movements) || movements.length === 0) {
+            container.innerHTML = '<p style="text-align:center; padding:30px; color:var(--text-muted);">Sin movimientos registrados.</p>';
+            return;
+          }
+          var tipoTxt = { compra: 'Compra', consumo: 'Venta', devolucion: 'Devolución', ajuste: 'Ajuste' };
+          var positivo = { compra: true, devolucion: true };
+          var html = '';
+          movements.forEach(function(m) {
+            // El ajuste manual puede ir para cualquier lado (corrige a favor o
+            // en contra), así que su signo sale del valor real, no del tipo
+            // fijo como en compra/venta/devolución.
+            var cantidadNum = Number(m.cantidad) || 0;
+            var esAjuste = m.tipo === 'ajuste';
+            var esPositivo = esAjuste ? cantidadNum >= 0 : !!positivo[m.tipo];
+            var signo = esPositivo ? '+' : '-';
+            var color = esAjuste ? 'var(--info)' : (esPositivo ? 'var(--success)' : 'var(--danger)');
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--warm);">';
+            html += '<div style="flex:2;"><strong>' + (m.ingrediente_nombre || 'Ingrediente #' + m.ingrediente_id) + '</strong><br><span style="font-size:0.8rem; color:var(--text-muted);">' + (tipoTxt[m.tipo] || m.tipo) + (m.motivo ? ' — ' + m.motivo : '') + (m.referencia ? ' (Ref: ' + m.referencia + ')' : '') + '</span></div>';
+            html += '<div style="text-align:right;"><span style="font-weight:700; color:' + color + '; font-size:1.1rem;">' + signo + Math.abs(cantidadNum) + ' ' + (m.unidad || '') + '</span>';
+            if (m.stock_anterior !== null && m.stock_nuevo !== null) {
+              html += '<br><span style="font-size:0.75rem; color:var(--text-muted);">' + m.stock_anterior + ' → ' + m.stock_nuevo + '</span>';
+            }
+            html += '<br><span style="font-size:0.75rem; color:var(--text-muted);">' + (m.created_at || '').split('.')[0] + '</span>';
+            html += '</div></div>';
+          });
+          container.innerHTML = html;
+        })
+        .catch(function(e) { console.error('Error loading ingredient movements:', e); });
+    }
+
+    function openIngredientModal(id) {
+      document.getElementById('ingredient-id').value = id || '';
+      document.getElementById('ingredient-modal-title').textContent = id ? 'Editar Ingrediente' : 'Nuevo Ingrediente';
+      var stockField = document.getElementById('ingredient-stock-inicial-field');
+      if (id) {
+        var ing = ingredientsData.find(function(i) { return i.id === id; });
+        if (!ing) return;
+        document.getElementById('ingredient-nombre').value = ing.nombre;
+        document.getElementById('ingredient-unidad').value = ing.unidad;
+        document.getElementById('ingredient-costo').value = ing.costo_unitario;
+        document.getElementById('ingredient-stock-minimo').value = ing.stock_minimo;
+        document.getElementById('ingredient-tamano-paquete').value = ing.tamano_paquete || '';
+        stockField.style.display = 'none'; // el stock se cambia con Reabastecer/Ajustar, no acá
+      } else {
+        document.getElementById('ingredient-nombre').value = '';
+        document.getElementById('ingredient-unidad').value = 'g';
+        document.getElementById('ingredient-costo').value = '';
+        document.getElementById('ingredient-stock-minimo').value = '';
+        document.getElementById('ingredient-tamano-paquete').value = '';
+        document.getElementById('ingredient-paquetes').value = '';
+        document.getElementById('ingredient-stock-inicial').value = '';
+        document.getElementById('ingredient-precio-total').value = '';
+        stockField.style.display = 'block';
+      }
+      document.getElementById('ingredient-modal').style.display = 'flex';
+    }
+
+    // "Tengo 3 paquetes de harina de 907g" es como el admin piensa el stock
+    // realmente, no en gramos sueltos. Multiplica paquetes × tamaño y llena
+    // el stock inicial solo (que a su vez alimenta el cálculo de costo).
+    function calcIngredientPaquetes() {
+      var tamano = parseFloat(document.getElementById('ingredient-tamano-paquete').value);
+      var paquetes = parseFloat(document.getElementById('ingredient-paquetes').value);
+      if (tamano > 0 && paquetes >= 0) {
+        document.getElementById('ingredient-stock-inicial').value = (tamano * paquetes).toFixed(2);
+        calcIngredientCosto();
+      }
+    }
+
+    // Convierte "compré X por RD$Y en total" al costo por unidad que
+    // realmente usa el sistema (RD$/gramo, RD$/ml, etc.) — así nadie tiene
+    // que dividir a mano el precio de la funda entre el peso.
+    function calcIngredientCosto() {
+      var cantidad = parseFloat(document.getElementById('ingredient-stock-inicial').value);
+      var precioTotal = parseFloat(document.getElementById('ingredient-precio-total').value);
+      var hint = document.getElementById('ingredient-costo-hint');
+      if (cantidad > 0 && precioTotal >= 0) {
+        document.getElementById('ingredient-costo').value = (precioTotal / cantidad).toFixed(4);
+        if (hint) hint.textContent = 'calculado: RD$' + precioTotal + ' ÷ ' + cantidad;
+      }
+    }
+
+    // Igual que calcIngredientPaquetes, pero para reabastecer: ya sabemos el
+    // tamaño del paquete de este ingrediente, así que solo pide cuántos compró.
+    function calcRestockPaquetes() {
+      var id = parseInt(document.getElementById('ingredient-move-id').value);
+      var ing = ingredientsData.find(function(i) { return i.id === id; });
+      if (!ing || !ing.tamano_paquete) return;
+      var paquetes = parseFloat(document.getElementById('ingredient-move-paquetes').value);
+      if (paquetes >= 0) {
+        document.getElementById('ingredient-move-cantidad').value = (ing.tamano_paquete * paquetes).toFixed(2);
+        calcRestockCosto();
+      }
+    }
+
+    // Contar paquetes físicos ("tengo 2 fundas y media") es más fácil y
+    // preciso que pesar todo — igual que calcRestockPaquetes, pero para el
+    // conteo real del ajuste manual.
+    function calcAdjustPaquetes() {
+      var id = parseInt(document.getElementById('ingredient-move-id').value);
+      var ing = ingredientsData.find(function(i) { return i.id === id; });
+      if (!ing || !ing.tamano_paquete) return;
+      var paquetes = parseFloat(document.getElementById('ingredient-move-adjust-paquetes').value);
+      if (paquetes >= 0) {
+        document.getElementById('ingredient-move-nuevo-stock').value = (ing.tamano_paquete * paquetes).toFixed(2);
+      }
+    }
+
+    function calcRestockCosto() {
+      var cantidad = parseFloat(document.getElementById('ingredient-move-cantidad').value);
+      var precioTotal = parseFloat(document.getElementById('ingredient-move-precio-total').value);
+      var hint = document.getElementById('ingredient-move-costo-hint');
+      if (cantidad > 0 && precioTotal >= 0) {
+        document.getElementById('ingredient-move-costo').value = (precioTotal / cantidad).toFixed(4);
+        if (hint) hint.textContent = 'calculado: RD$' + precioTotal + ' ÷ ' + cantidad;
+      }
+    }
+
+    function closeIngredientModal() {
+      document.getElementById('ingredient-modal').style.display = 'none';
+    }
+
+    async function saveIngredient() {
+      var id = document.getElementById('ingredient-id').value;
+      var nombre = document.getElementById('ingredient-nombre').value.trim();
+      if (!nombre) { showToast('Ingresa un nombre', 'error'); return; }
+
+      var data = {
+        nombre: nombre,
+        unidad: document.getElementById('ingredient-unidad').value,
+        costo_unitario: parseFloat(document.getElementById('ingredient-costo').value) || 0,
+        stock_minimo: parseFloat(document.getElementById('ingredient-stock-minimo').value) || 0,
+        tamano_paquete: parseFloat(document.getElementById('ingredient-tamano-paquete').value) || 0
+      };
+      if (!id) data.stock = parseFloat(document.getElementById('ingredient-stock-inicial').value) || 0;
+
+      try {
+        var res = await apiFetch(API_URL + '/api/ingredients' + (id ? '/' + id : ''), {
+          method: id ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (res.ok) {
+          closeIngredientModal();
+          renderIngredientes();
+          showToast('Ingrediente guardado ✅', 'success');
+        } else {
+          showToast('Error al guardar', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión', 'error');
+      }
+    }
+
+    function confirmDeleteIngredient(id) {
+      var ing = ingredientsData.find(function(i) { return i.id === id; });
+      document.getElementById('confirm-title').textContent = 'Eliminar ingrediente?';
+      document.getElementById('confirm-message').textContent = 'Eliminar "' + (ing ? ing.nombre : '') + '"? Las recetas que lo usan dejarán de descontarlo.';
+      document.getElementById('confirm-btn').onclick = function() {
+        apiFetch(API_URL + '/api/ingredients/' + id, { method: 'DELETE' })
+          .then(function(r) {
+            if (r.ok) { closeConfirm(); renderIngredientes(); showToast('Ingrediente eliminado', 'success'); }
+            else { showToast('Error al eliminar', 'error'); }
+          })
+          .catch(function() { showToast('Error de conexión', 'error'); });
+      };
+      document.getElementById('confirm-overlay').classList.add('open');
+    }
+
+    var ingredientMoveType = 'restock';
+
+    function openIngredientMoveModal(id) {
+      var ing = ingredientsData.find(function(i) { return i.id === id; });
+      if (!ing) return;
+      document.getElementById('ingredient-move-id').value = id;
+      document.getElementById('ingredient-move-actual').textContent = ing.stock + ' ' + ing.unidad;
+      document.getElementById('ingredient-move-cantidad').value = '';
+      document.getElementById('ingredient-move-precio-total').value = '';
+      document.getElementById('ingredient-move-costo').value = '';
+      document.getElementById('ingredient-move-nuevo-stock').value = ing.stock;
+      document.getElementById('ingredient-move-motivo').value = '';
+      document.getElementById('ingredient-move-paquetes').value = '';
+      document.getElementById('ingredient-move-adjust-paquetes').value = ing.tamano_paquete > 0 ? (ing.stock / ing.tamano_paquete).toFixed(2) : '';
+      var paqueteHint = ing.tamano_paquete > 0 ? '(paquetes de ' + ing.tamano_paquete + ' ' + ing.unidad + ')' : '';
+      var paquetesField = document.getElementById('ingredient-move-paquetes-field');
+      var adjustPaquetesField = document.getElementById('ingredient-move-adjust-paquetes-field');
+      if (ing.tamano_paquete > 0) {
+        paquetesField.style.display = 'block';
+        adjustPaquetesField.style.display = 'block';
+        document.getElementById('ingredient-move-paquete-hint').textContent = paqueteHint;
+        document.getElementById('ingredient-move-adjust-paquete-hint').textContent = paqueteHint;
+      } else {
+        paquetesField.style.display = 'none';
+        adjustPaquetesField.style.display = 'none';
+      }
+      setIngredientMoveType('restock');
+      document.getElementById('ingredient-move-modal').style.display = 'flex';
+    }
+
+    function closeIngredientMoveModal() {
+      document.getElementById('ingredient-move-modal').style.display = 'none';
+    }
+
+    function setIngredientMoveType(type) {
+      ingredientMoveType = type;
+      var isRestock = type === 'restock';
+      document.getElementById('ingredient-move-restock-fields').style.display = isRestock ? 'block' : 'none';
+      document.getElementById('ingredient-move-adjust-fields').style.display = isRestock ? 'none' : 'block';
+      document.getElementById('ingredient-move-tab-restock').style.background = isRestock ? 'var(--accent)' : 'white';
+      document.getElementById('ingredient-move-tab-restock').style.color = isRestock ? 'white' : 'var(--primary)';
+      document.getElementById('ingredient-move-tab-adjust').style.background = !isRestock ? 'var(--accent)' : 'white';
+      document.getElementById('ingredient-move-tab-adjust').style.color = !isRestock ? 'white' : 'var(--primary)';
+      document.getElementById('ingredient-move-title').textContent = isRestock ? 'Reabastecer' : 'Ajustar stock real';
+    }
+
+    async function saveIngredientMove() {
+      var id = document.getElementById('ingredient-move-id').value;
+      var motivo = document.getElementById('ingredient-move-motivo').value.trim();
+      try {
+        var res;
+        if (ingredientMoveType === 'restock') {
+          var cantidad = parseFloat(document.getElementById('ingredient-move-cantidad').value);
+          if (!cantidad || cantidad <= 0) { showToast('Ingresa una cantidad válida', 'error'); return; }
+          var costoStr = document.getElementById('ingredient-move-costo').value;
+          res = await apiFetch(API_URL + '/api/ingredients/' + id + '/restock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cantidad: cantidad, costo_unitario: costoStr ? parseFloat(costoStr) : undefined, motivo: motivo })
+          });
+        } else {
+          var nuevoStock = document.getElementById('ingredient-move-nuevo-stock').value;
+          if (nuevoStock === '') { showToast('Ingresa el stock real', 'error'); return; }
+          res = await apiFetch(API_URL + '/api/ingredients/' + id + '/adjust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stock: parseFloat(nuevoStock), motivo: motivo })
+          });
+        }
+        if (res.ok) {
+          closeIngredientMoveModal();
+          renderIngredientes();
+          showToast('Movimiento registrado ✅', 'success');
+        } else {
+          var d = await res.json().catch(function() { return {}; });
+          showToast(d.error || 'Error al guardar', 'error');
+        }
+      } catch (err) {
+        showToast('Error de conexión', 'error');
+      }
     }
 
     if (sessionStorage.getItem('admin_logged') === 'true') {

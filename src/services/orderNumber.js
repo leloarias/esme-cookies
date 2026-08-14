@@ -32,6 +32,11 @@ async function nextOrderNumber() {
   }
 
   orderCounter = newNum;
+  // Persistido en config: si el pedido más alto se borra permanentemente y el
+  // servidor reinicia, MAX(numero) por sí solo "retrocedería" y reemitiría un
+  // número ya usado, lo que rompe la devolución de stock/ingredientes (el
+  // sistema los cree del pedido viejo, ya devuelto, y no repite la devolución).
+  await prepare('UPDATE config SET lastOrderNumber = ? WHERE id = 1').run(newNum);
   console.log('New order number:', newNum);
   return newNum;
 }

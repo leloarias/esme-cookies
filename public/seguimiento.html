@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Seguí tu pedido - Esme Cookies</title>
+  <title>Sigue tu pedido - Esme Cookies</title>
   <link rel="icon" type="image/svg+xml"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍪</text></svg>">
   <link
@@ -107,8 +107,8 @@
   <div class="container">
     <div class="header">
       <div class="emoji">🍪</div>
-      <h1>Seguí tu pedido</h1>
-      <p>Ingresá tu número de WhatsApp para ver el estado</p>
+      <h1>Sigue tu pedido</h1>
+      <p>Ingresa tu número de WhatsApp para ver el estado</p>
     </div>
 
     <div class="search-box">
@@ -186,21 +186,35 @@
       var cont = document.getElementById('resultado');
       var btn = document.getElementById('btn');
       if (tel.length < 10) {
-        cont.innerHTML = '<div class="msg">Ingresá un número válido (10 dígitos).</div>';
+        cont.innerHTML = '<div class="msg">Ingresa un número válido (10 dígitos).</div>';
         return;
       }
       btn.disabled = true; btn.textContent = 'Buscando...';
       try {
         var res = await fetch('/api/seguimiento/' + tel);
-        if (!res.ok) { cont.innerHTML = '<div class="msg">Error al buscar. Intentá de nuevo.</div>'; btn.disabled = false; btn.textContent = 'Buscar'; return; }
+        if (!res.ok) { cont.innerHTML = '<div class="msg">Error al buscar. Intenta de nuevo.</div>'; btn.disabled = false; btn.textContent = 'Buscar'; return; }
         var data = await res.json();
         if (!Array.isArray(data) || data.length === 0) {
-          cont.innerHTML = '<div class="msg">No encontramos pedidos con ese número.<br>Revisá que sea el mismo que usaste al ordenar.</div>';
+          cont.innerHTML = '<div class="msg">No encontramos pedidos con ese número.<br>Revisa que sea el mismo que usaste al ordenar.</div>';
         } else {
-          cont.innerHTML = data.map(renderOrder).join('');
+          // El teléfono puede tener pedidos viejos cancelados o ya entregados
+          // mezclados con uno activo — mostrar el activo de una vez, no que
+          // un cancelado de hace rato tape el que sí está en curso.
+          var activos = data.filter(function (o) { return o.estado !== 'Cancelado' && o.estado !== 'Entregado'; });
+          var historial = data.filter(function (o) { return o.estado === 'Cancelado' || o.estado === 'Entregado'; });
+          var html = activos.length > 0
+            ? activos.map(renderOrder).join('')
+            : '<div class="msg">No tenés pedidos en curso ahora mismo.</div>';
+          if (historial.length > 0) {
+            html += '<details style="margin-top:14px;">' +
+              '<summary style="cursor:pointer;font-weight:600;color:var(--muted);padding:10px 0;">Ver pedidos anteriores (' + historial.length + ')</summary>' +
+              historial.map(renderOrder).join('') +
+              '</details>';
+          }
+          cont.innerHTML = html;
         }
       } catch (e) {
-        cont.innerHTML = '<div class="msg">Hubo un error. Intentá de nuevo en un momento.</div>';
+        cont.innerHTML = '<div class="msg">Hubo un error. Intenta de nuevo en un momento.</div>';
       }
       btn.disabled = false; btn.textContent = 'Buscar';
     }

@@ -9,7 +9,7 @@ function setIO(instance) {
 
 function getIO() {
   if (!io) {
-    throw new Error('Socket.io no inicializado. Llamá a setIO() al arrancar el servidor.');
+    throw new Error('Socket.io no inicializado. Llama a setIO() al arrancar el servidor.');
   }
   return io;
 }

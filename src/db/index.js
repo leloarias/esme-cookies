@@ -167,6 +167,36 @@ async function initDatabase() {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS ingredientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      unidad TEXT NOT NULL DEFAULT 'g',
+      stock REAL DEFAULT 0,
+      costo_unitario REAL DEFAULT 0,
+      stock_minimo REAL DEFAULT 0,
+      activo INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS movimientos_ingredientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingrediente_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'ajuste',
+      cantidad REAL NOT NULL,
+      stock_anterior REAL,
+      stock_nuevo REAL,
+      costo_total REAL DEFAULT 0,
+      motivo TEXT,
+      referencia TEXT,
+      created_by TEXT DEFAULT 'sistema',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (ingrediente_id) REFERENCES ingredientes(id)
+    )
+  `);
+
   // Migraciones para bases de datos ya existentes (columnas agregadas después).
   await ensureColumn('productos', 'stock', 'INTEGER');
   await ensureColumn('config', 'lowStockThreshold', 'INTEGER DEFAULT 5');
@@ -174,6 +204,12 @@ async function initDatabase() {
   await ensureColumn('config', 'customBoxConfig', 'TEXT');
   await ensureColumn('productos', 'tipo', "TEXT DEFAULT 'producto'");
   await ensureColumn('productos', 'box_config', 'TEXT');
+  await ensureColumn('config', 'envioZones', "TEXT DEFAULT '[]'");
+  await ensureColumn('config', 'categoryImages', "TEXT DEFAULT '[]'");
+  await ensureColumn('productos', 'categoria', "TEXT DEFAULT 'Galletas'");
+  await ensureColumn('productos', 'receta', "TEXT DEFAULT '[]'");
+  await ensureColumn('ingredientes', 'alerta_enviada', 'INTEGER DEFAULT 0');
+  await ensureColumn('ingredientes', 'tamano_paquete', 'REAL DEFAULT 0');
 
   // Inicializar config si está vacía
   const configCount = await db.execute('SELECT COUNT(*) as count FROM config');
@@ -196,6 +232,9 @@ async function initDatabase() {
 
   // Migraciones
   await ensureColumn('promociones', 'solo_cajas', 'INTEGER DEFAULT 0');
+  // Promos para clientes leales (con N o más pedidos previos)
+  await ensureColumn('promociones', 'solo_clientes_leales', 'INTEGER DEFAULT 0');
+  await ensureColumn('promociones', 'min_pedidos_leal', 'INTEGER DEFAULT 3');
 
   // Inicializar admin por defecto si no existe
   const adminCount = await db.execute('SELECT COUNT(*) as count FROM administradores');

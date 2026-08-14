@@ -22,9 +22,34 @@ async function decrementStock(cartItems, referencia) {
         const anterior = prod.stock;
         const nuevo = Math.max(0, anterior - qty);
         await prepare('UPDATE productos SET stock = ? WHERE id = ?').run(nuevo, item.id);
-        await logMovement(item.id, 'venta', qty, anterior, nuevo, 'Venta #' + (referencia || ''), referencia);
+        await logMovement(item.id, 'venta', qty, anterior, nuevo, 'Venta #' + (referencia || ''), String(referencia || ''));
       }
     }
+  }
+}
+
+// Devuelve al stock las unidades que se descontaron al crear un pedido, cuando
+// ese pedido se cancela. Sin esto, cada cancelación reduce el inventario
+// disponible para siempre aunque el producto nunca haya salido del local.
+// Idempotente: si ya se restauró este pedido (existe un movimiento 'cancelacion'
+// con esa referencia), no vuelve a sumar.
+async function restoreStockForOrder(numero, motivo) {
+  const referencia = String(numero);
+  // El driver de la base de datos guarda los números como REAL, así que SQLite
+  // puede haber quedado con "20260814007.0" en vez de "20260814007" para pedidos
+  // ya existentes: se acepta cualquiera de las dos formas.
+  const referenciaLegacy = referencia + '.0';
+  const yaRestaurado = await prepare("SELECT 1 FROM movimientos_stock WHERE referencia IN (?, ?) AND tipo = 'cancelacion' LIMIT 1").get(referencia, referenciaLegacy);
+  if (yaRestaurado) return;
+
+  const movimientosVenta = await prepare("SELECT producto_id, cantidad FROM movimientos_stock WHERE referencia IN (?, ?) AND tipo = 'venta'").all(referencia, referenciaLegacy);
+  for (const m of movimientosVenta) {
+    const prod = await prepare('SELECT stock FROM productos WHERE id = ? AND stock IS NOT NULL').get(m.producto_id);
+    if (!prod) continue;
+    const anterior = prod.stock;
+    const nuevo = anterior + m.cantidad;
+    await prepare('UPDATE productos SET stock = ? WHERE id = ?').run(nuevo, m.producto_id);
+    await logMovement(m.producto_id, 'cancelacion', m.cantidad, anterior, nuevo, motivo || ('Pedido #' + numero + ' cancelado'), referencia);
   }
 }
 
@@ -32,7 +57,7 @@ async function logMovement(productoId, tipo, cantidad, stockAnterior, stockNuevo
   await prepare(`
     INSERT INTO movimientos_stock (producto_id, tipo, cantidad, stock_anterior, stock_nuevo, motivo, referencia, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(productoId, tipo, cantidad, stockAnterior ?? null, stockNuevo ?? null, motivo || '', referencia || '', createdBy || 'sistema');
+  `).run(productoId, tipo, cantidad, stockAnterior ?? null, stockNuevo ?? null, motivo || '', referencia != null ? String(referencia) : '', createdBy || 'sistema');
 }
 
 async function getMovements(productoId, limit, offset) {
@@ -76,4 +101,4 @@ async function getInventorySummary() {
   };
 }
 
-module.exports = { checkStock, decrementStock, logMovement, getMovements, getAllMovements, getInventorySummary };
+module.exports = { checkStock, decrementStock, restoreStockForOrder, logMovement, getMovements, getAllMovements, getInventorySummary };
