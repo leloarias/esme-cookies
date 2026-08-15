@@ -40,6 +40,7 @@ io.on('connection', (socket) => {
 
 async function startServer() {
   try {
+    console.log('[DIAG] antes de initDatabase');
     await initDatabase();
     console.log('Base de datos inicializada correctamente');
 
@@ -48,14 +49,18 @@ async function startServer() {
     // si el pedido más alto se borró permanentemente, MAX(numero) por sí solo
     // bajaría y reemitiría un número ya usado. Se persiste el mayor entre lo
     // que hay en pedidos y lo último guardado en config.
+    console.log('[DIAG] antes de MAX(numero)');
     const maxOrder = await prepare('SELECT MAX(numero) as maxNum FROM pedidos').get();
+    console.log('[DIAG] despues de MAX(numero):', maxOrder);
     const lastPersisted = await prepare('SELECT lastOrderNumber FROM config WHERE id = 1').get();
+    console.log('[DIAG] despues de lastOrderNumber:', lastPersisted);
     const initialCounter = Math.max(
       Number(maxOrder?.maxNum) || 0,
       Number(lastPersisted?.lastOrderNumber) || 0
     ) || parseInt(new Date().getFullYear() + '0100000');
     await prepare('UPDATE config SET lastOrderNumber = ? WHERE id = 1').run(initialCounter);
     console.log('Order counter initialized:', initialCounter);
+    console.log('[DIAG] antes de server.listen');
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log('═══════════════════════════════════════════════');

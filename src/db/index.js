@@ -226,15 +226,21 @@ async function initDatabase() {
   // este cambio (ver src/utils/crypto.js). Sin esto, la contraseña de la app
   // de Gmail queda legible por cualquiera que abra el archivo de la base de datos.
   const { encrypt } = require('../utils/crypto');
+  console.log('[DIAG] antes de SELECT emailPass');
   const currentConfig = await db.execute('SELECT emailPass FROM config WHERE id = 1');
+  console.log('[DIAG] despues de SELECT emailPass, valor presente:', !!(currentConfig.rows[0] && currentConfig.rows[0].emailPass));
   const currentEmailPass = currentConfig.rows[0] && currentConfig.rows[0].emailPass;
   if (currentEmailPass && !String(currentEmailPass).startsWith('enc1:')) {
+    console.log('[DIAG] antes de encrypt()');
+    const encrypted = encrypt(currentEmailPass);
+    console.log('[DIAG] despues de encrypt(), largo:', encrypted.length);
     await db.execute({
       sql: 'UPDATE config SET emailPass = ? WHERE id = 1',
-      args: [encrypt(currentEmailPass)]
+      args: [encrypted]
     });
     console.log('[DB] Migración: emailPass cifrado en reposo');
   }
+  console.log('[DIAG] bloque emailPass terminado');
 
   // Asegurar que exista el producto "Caja Personalizada"
   const boxExists = await db.execute("SELECT COUNT(*) as c FROM productos WHERE id = 7");
@@ -245,17 +251,20 @@ async function initDatabase() {
     });
     console.log('[DB] Producto "Caja Personalizada" creado');
   }
+  console.log('[DIAG] caja personalizada ok');
 
   // Migraciones
   await ensureColumn('promociones', 'solo_cajas', 'INTEGER DEFAULT 0');
   // Promos para clientes leales (con N o más pedidos previos)
   await ensureColumn('promociones', 'solo_clientes_leales', 'INTEGER DEFAULT 0');
   await ensureColumn('promociones', 'min_pedidos_leal', 'INTEGER DEFAULT 3');
+  console.log('[DIAG] promo ensureColumn ok');
 
   // Inicializar admin por defecto si no existe. Sin contraseña hardcodeada:
   // si no se definió ADMIN_PASS en el .env, se genera una al azar y se
   // imprime una única vez (no se puede volver a mostrar después).
   const adminCount = await db.execute('SELECT COUNT(*) as count FROM administradores');
+  console.log('[DIAG] adminCount:', adminCount.rows[0].count);
   if (Number(adminCount.rows[0].count) === 0) {
     const bcrypt = require('bcryptjs');
     const username = process.env.ADMIN_USER || 'admin';
@@ -264,7 +273,9 @@ async function initDatabase() {
     if (wasGenerated) {
       password = require('crypto').randomBytes(9).toString('base64url');
     }
+    console.log('[DIAG] antes de bcrypt.hashSync');
     const hash = bcrypt.hashSync(password, 10);
+    console.log('[DIAG] despues de bcrypt.hashSync');
     await db.execute({
       sql: 'INSERT INTO administradores (username, password_hash) VALUES (?, ?)',
       args: [username, hash]
