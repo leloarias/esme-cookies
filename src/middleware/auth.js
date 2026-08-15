@@ -36,6 +36,19 @@ function generateToken(adminUser) {
   return jwt.sign(payload, JWT_SECRET, JWT_OPTIONS);
 }
 
+// Misma verificación que verifyToken, pero para usarse fuera de un request
+// HTTP (ej. autenticar la conexión de un socket antes de unirlo a la sala
+// de admins). Devuelve el payload si es válido, o null si no.
+function verifyAdminToken(token) {
+  try {
+    const verified = jwt.verify(token, JWT_SECRET, { algorithms: ['HS512'] });
+    if (verified.type !== 'admin_access') return null;
+    return verified;
+  } catch (error) {
+    return null;
+  }
+}
+
 function verifyToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   
@@ -73,5 +86,6 @@ function verifyToken(req, res, next) {
 
 module.exports = {
   generateToken,
-  verifyToken
+  verifyToken,
+  verifyAdminToken
 };

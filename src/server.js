@@ -7,7 +7,7 @@ require('dotenv').config();
 const app = require('./app');
 const { initDatabase, prepare } = require('./db');
 const { setIO } = require('./services/realtime');
-const { setOrderCounter } = require('./services/orderNumber');
+const { verifyAdminToken } = require('./middleware/auth');
 const { getDominicanDateTime, normalizePhone } = require('./utils/helpers');
 const { restoreStockForOrder } = require('./services/inventory');
 const { restoreForOrder: restoreIngredientsForOrder } = require('./services/ingredients');
@@ -26,6 +26,16 @@ const PORT = process.env.PORT || 3000;
 
 io.on('connection', (socket) => {
   console.log('Cliente conectado a WebSocket:', socket.id);
+
+  // El panel de admin se autentica sobre el socket ya conectado y recién ahí
+  // se une a la sala 'admins'. Eventos con datos de clientes (nuevo_pedido)
+  // se emiten solo a esa sala — nunca al socket público que abre la tienda
+  // para cualquier visitante (ver 'const socket = io()' en index.html).
+  socket.on('admin:auth', (token) => {
+    if (typeof token === 'string' && verifyAdminToken(token)) {
+      socket.join('admins');
+    }
+  });
 });
 
 async function startServer() {
@@ -33,17 +43,18 @@ async function startServer() {
     await initDatabase();
     console.log('Base de datos inicializada correctamente');
 
-    // El contador nunca debe retroceder: si el pedido más alto se borra
-    // permanentemente, MAX(numero) por sí solo bajaría y reemitiría un número
-    // ya usado. Se toma el mayor entre lo que hay en pedidos y lo último
-    // persistido en config.
+    // config.lastOrderNumber es la única fuente de verdad para el próximo
+    // número de pedido (ver services/orderNumber.js). Nunca debe retroceder:
+    // si el pedido más alto se borró permanentemente, MAX(numero) por sí solo
+    // bajaría y reemitiría un número ya usado. Se persiste el mayor entre lo
+    // que hay en pedidos y lo último guardado en config.
     const maxOrder = await prepare('SELECT MAX(numero) as maxNum FROM pedidos').get();
     const lastPersisted = await prepare('SELECT lastOrderNumber FROM config WHERE id = 1').get();
     const initialCounter = Math.max(
       Number(maxOrder?.maxNum) || 0,
       Number(lastPersisted?.lastOrderNumber) || 0
     ) || parseInt(new Date().getFullYear() + '0100000');
-    setOrderCounter(initialCounter);
+    await prepare('UPDATE config SET lastOrderNumber = ? WHERE id = 1').run(initialCounter);
     console.log('Order counter initialized:', initialCounter);
 
     server.listen(PORT, '0.0.0.0', () => {
@@ -62,8 +73,12 @@ async function startServer() {
         const { date: currentDate } = getDominicanDateTime(now);
 
         try {
+          // fecha_fin = '' significa "sin fecha de fin" (promo indefinida).
+          // Comparado como texto, '' < cualquier fecha da true, así que sin
+          // este filtro el chequeo desactivaba solo, al minuto de creada,
+          // cualquier promo a la que no se le puso fecha de fin.
           const expiredPromos = await prepare(
-            'SELECT id, titulo FROM promociones WHERE activa = 1 AND fecha_fin < ?'
+            "SELECT id, titulo FROM promociones WHERE activa = 1 AND fecha_fin IS NOT NULL AND fecha_fin != '' AND fecha_fin < ?"
           ).all(currentDate);
 
           if (expiredPromos.length > 0) {

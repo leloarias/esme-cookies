@@ -210,6 +210,8 @@ async function initDatabase() {
   await ensureColumn('productos', 'receta', "TEXT DEFAULT '[]'");
   await ensureColumn('ingredientes', 'alerta_enviada', 'INTEGER DEFAULT 0');
   await ensureColumn('ingredientes', 'tamano_paquete', 'REAL DEFAULT 0');
+  await ensureColumn('pedidos', 'comprobante_url', 'TEXT');
+  await ensureColumn('pedidos', 'fecha_entrega', 'TEXT');
 
   // Inicializar config si está vacía
   const configCount = await db.execute('SELECT COUNT(*) as count FROM config');
@@ -218,6 +220,20 @@ async function initDatabase() {
       sql: 'INSERT INTO config (id, pickupAddress, deliveryPrice, envioPrice) VALUES (1, ?, ?, ?)',
       args: ['Calle Principal #1, San Juan', 50, 100]
     });
+  }
+
+  // Migración: cifrar emailPass si quedó guardado en texto plano de antes de
+  // este cambio (ver src/utils/crypto.js). Sin esto, la contraseña de la app
+  // de Gmail queda legible por cualquiera que abra el archivo de la base de datos.
+  const { encrypt } = require('../utils/crypto');
+  const currentConfig = await db.execute('SELECT emailPass FROM config WHERE id = 1');
+  const currentEmailPass = currentConfig.rows[0] && currentConfig.rows[0].emailPass;
+  if (currentEmailPass && !String(currentEmailPass).startsWith('enc1:')) {
+    await db.execute({
+      sql: 'UPDATE config SET emailPass = ? WHERE id = 1',
+      args: [encrypt(currentEmailPass)]
+    });
+    console.log('[DB] Migración: emailPass cifrado en reposo');
   }
 
   // Asegurar que exista el producto "Caja Personalizada"
@@ -236,16 +252,31 @@ async function initDatabase() {
   await ensureColumn('promociones', 'solo_clientes_leales', 'INTEGER DEFAULT 0');
   await ensureColumn('promociones', 'min_pedidos_leal', 'INTEGER DEFAULT 3');
 
-  // Inicializar admin por defecto si no existe
+  // Inicializar admin por defecto si no existe. Sin contraseña hardcodeada:
+  // si no se definió ADMIN_PASS en el .env, se genera una al azar y se
+  // imprime una única vez (no se puede volver a mostrar después).
   const adminCount = await db.execute('SELECT COUNT(*) as count FROM administradores');
   if (Number(adminCount.rows[0].count) === 0) {
     const bcrypt = require('bcryptjs');
-    const hash = bcrypt.hashSync(process.env.ADMIN_PASS || 'admin123', 10);
+    const username = process.env.ADMIN_USER || 'admin';
+    let password = process.env.ADMIN_PASS;
+    const wasGenerated = !password;
+    if (wasGenerated) {
+      password = require('crypto').randomBytes(9).toString('base64url');
+    }
+    const hash = bcrypt.hashSync(password, 10);
     await db.execute({
       sql: 'INSERT INTO administradores (username, password_hash) VALUES (?, ?)',
-      args: [process.env.ADMIN_USER || 'admin', hash]
+      args: [username, hash]
     });
-    console.log('[DB] Admin creado: ' + (process.env.ADMIN_USER || 'admin'));
+    if (wasGenerated) {
+      console.log('═══════════════════════════════════════════════');
+      console.log(`[DB] Admin creado: usuario "${username}"`);
+      console.log(`[DB] Contraseña generada (guárdala ya, no se vuelve a mostrar): ${password}`);
+      console.log('═══════════════════════════════════════════════');
+    } else {
+      console.log('[DB] Admin creado: ' + username);
+    }
   }
 
   return db;

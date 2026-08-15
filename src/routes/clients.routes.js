@@ -105,7 +105,7 @@ router.post('/api/clientes', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/api/clientes/:id', async (req, res) => {
+router.get('/api/clientes/:id', verifyToken, async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const cliente = await prepare('SELECT * FROM clientes WHERE id = ?').get(id);

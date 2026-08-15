@@ -744,7 +744,7 @@
       background: white;
       border-radius: 20px;
       width: 100%;
-      max-width: 700px;
+      max-width: 800px;
       max-height: 90vh;
       display: flex;
       flex-direction: column;
@@ -1005,19 +1005,24 @@
 
   <div class="container">
     
-    <!-- Ofertas compactas -->
-    <div class="offers-container" id="offers-container"></div>
+    <!-- Catálogo: se oculta entero mientras se muestra la confirmación del
+         pedido, para que el cliente no siga viendo productos para agregar
+         justo cuando tiene que subir el comprobante de su pedido actual. -->
+    <div id="catalog-section">
+      <!-- Ofertas compactas -->
+      <div class="offers-container" id="offers-container"></div>
 
-    <h2 class="section-title">Nuestros Productos</h2>
+      <h2 class="section-title">Nuestros Productos</h2>
 
-    <div class="category-home" id="category-home"></div>
+      <div class="category-home" id="category-home"></div>
 
-    <button class="back-to-categories" id="back-to-categories" onclick="goToCategoryHome()" style="display:none;">← Volver a categorías</button>
+      <button class="back-to-categories" id="back-to-categories" onclick="goToCategoryHome()" style="display:none;">← Volver a categorías</button>
 
-    <div class="category-pills" id="category-pills"></div>
+      <div class="category-pills" id="category-pills"></div>
 
-    <div class="products-grid" id="products-grid">
-      <div class="loading">Cargando productos...</div>
+      <div class="products-grid" id="products-grid">
+        <div class="loading">Cargando productos...</div>
+      </div>
     </div>
 
     <div id="order-form">
@@ -1095,9 +1100,14 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Notas</label>
-            <input type="text" id="observaciones" placeholder="Ej: Sin nueces">
+            <label>Fecha de entrega deseada (opcional)</label>
+            <input type="date" id="fecha-entrega">
           </div>
+        </div>
+
+        <div class="form-group">
+          <label>Notas</label>
+          <input type="text" id="observaciones" placeholder="Ej: Sin nueces">
         </div>
 
         <div class="summary">
@@ -1123,6 +1133,14 @@
       <p>Te contactaremos pronto por WhatsApp</p>
       <div id="cupos-disponibles" style="margin:15px 0;padding:12px;background:var(--warm);border-radius:10px;font-size:0.85rem;"></div>
       <div id="bank-accounts-display" style="margin:15px auto;max-width:400px;padding:15px;background:#E8F5E9;border-radius:12px;border:2px solid var(--success);text-align:left;"></div>
+
+      <div id="comprobante-upload" style="display:none;margin:15px auto;max-width:400px;padding:15px;background:var(--warm);border-radius:12px;text-align:left;">
+        <div style="font-weight:700;margin-bottom:8px;">📎 Adjunta tu comprobante de pago</div>
+        <input type="file" id="comprobante-file" accept="image/*" style="width:100%;margin-bottom:10px;">
+        <button onclick="subirComprobante()" id="comprobante-btn" style="width:100%;padding:12px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;">Subir comprobante</button>
+        <div id="comprobante-status" style="margin-top:8px;font-size:0.85rem;"></div>
+      </div>
+
       <a id="track-link" href="/seguimiento" style="display:inline-block; margin:8px; padding:14px 24px; background:var(--primary); color:#fff; border-radius:12px; text-decoration:none; font-weight:700;">📍 Sigue tu pedido</a>
       <button class="new-order-btn" onclick="newOrder()">+ Hacer otro pedido</button>
     </div>
@@ -1181,6 +1199,8 @@
     let products = [];
     let cart = {};
     let deliveryType = 'pickup';
+    let lastOrderNumero = null;
+    let lastOrderTelefono = '';
     let config = { delivery: 50, envio: 100, isOpen: 1, shopPhone: '8097851241', shopName: 'Esme Cookies' };
     let activePromos = [];
     let customBox = null;
@@ -2116,6 +2136,7 @@
             pago, tipo_entrega: deliveryType,
             direccion: deliveryType === 'pickup' ? '' : direccion, sector,
             observaciones: [observaciones, direccion ? 'Dir: ' + direccion : '', sector ? 'Sector: ' + sector : ''].filter(Boolean).join(' | '),
+            fecha_entrega: document.getElementById('fecha-entrega').value || null,
             cartItems: cartItems
           })
         });
@@ -2124,7 +2145,14 @@
           document.getElementById('order-number').textContent = String(data.numero).padStart(4, '0');
           document.getElementById('track-link').href = '/seguimiento?tel=' + encodeURIComponent((telefono || '').replace(/\D/g, ''));
           document.getElementById('order-form').style.display = 'none';
+          document.getElementById('catalog-section').style.display = 'none';
           document.getElementById('success-screen').classList.add('show');
+
+          // Guardado para poder subir el comprobante después de crear el pedido.
+          lastOrderNumero = data.numero;
+          lastOrderTelefono = telefono;
+          document.getElementById('comprobante-upload').style.display = pago === 'Transferencia' ? 'block' : 'none';
+          document.getElementById('comprobante-status').textContent = '';
           window.scrollTo({ top: 0, behavior: 'smooth' });
           
           // Mostrar cupos disponibles después del pedido
@@ -2138,7 +2166,8 @@
             }
           });
           document.getElementById('cupos-disponibles').textContent = cuposMsg;
-          document.getElementById('cupos-disponibles').style.background = cuposMsg ? '#fff3cd' : 'var(--warm)';
+          document.getElementById('cupos-disponibles').style.display = cuposMsg ? 'block' : 'none';
+          document.getElementById('cupos-disponibles').style.background = '#fff3cd';
           
           // Mostrar cuentas bancarias
           let bankHtml = '';
@@ -2162,6 +2191,7 @@
             });
           }
           document.getElementById('bank-accounts-display').innerHTML = bankHtml;
+          document.getElementById('bank-accounts-display').style.display = bankHtml ? 'block' : 'none';
           
           if (typeof confetti === 'function') {
             confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 }, colors: ['#C9883A', '#2D7A4D', '#2C1810'] });
@@ -2175,19 +2205,19 @@
             });
 
             let whatsappMsg = `*¡Nuevo Pedido #${String(data.numero).padStart(4, '0')}!*\n\n`;
-            whatsappMsg += `👤 *Cliente:* ${cliente}\n`;
-            whatsappMsg += `📱 *Teléfono:* ${data.telefono}\n`;
-            if (data.direccion) whatsappMsg += `📍 *Dirección:* ${data.direccion}\n`;
-            whatsappMsg += `🚚 *Entrega:* ${deliveryType === 'pickup' ? 'Pasar a buscar' : deliveryType === 'delivery' ? 'Delivery' : 'Envío'}\n\n`;
-            whatsappMsg += `🍪 *Productos:*\n${productosList}\n`;
+            whatsappMsg += `*Cliente:* ${cliente}\n`;
+            whatsappMsg += `*Teléfono:* ${data.telefono}\n`;
+            if (data.direccion) whatsappMsg += `*Dirección:* ${data.direccion}\n`;
+            whatsappMsg += `*Entrega:* ${deliveryType === 'pickup' ? 'Pasar a buscar' : deliveryType === 'delivery' ? 'Delivery' : 'Envío'}\n\n`;
+            whatsappMsg += `*Productos:*\n${productosList}\n`;
             if (data.promos && data.promos.length > 0) {
-              whatsappMsg += `🎉 *Promociones aplicadas:*\n`;
+              whatsappMsg += `*Promociones aplicadas:*\n`;
               data.promos.forEach(p => {
                 whatsappMsg += `• ${p.titulo}: -RD$${p.ahorro.toLocaleString()}\n`;
               });
               whatsappMsg += '\n';
             }
-            whatsappMsg += `💰 *TOTAL:* RD$ ${(data.total || totalConDescuento).toLocaleString()}`;
+            whatsappMsg += `*TOTAL:* RD$ ${(data.total || totalConDescuento).toLocaleString()}`;
 
             window.open('https://wa.me/' + config.shopPhone.replace(/\D/g, '') + '?text=' + encodeURIComponent(whatsappMsg), '_blank');
           }, 2000);
@@ -2203,6 +2233,47 @@
       btn.textContent = 'Realizar Pedido';
     }
 
+    function subirComprobante() {
+      const fileInput = document.getElementById('comprobante-file');
+      const status = document.getElementById('comprobante-status');
+      const btn = document.getElementById('comprobante-btn');
+      const file = fileInput.files[0];
+      if (!file) { status.textContent = 'Elegí una imagen primero.'; status.style.color = 'var(--danger)'; return; }
+      if (!lastOrderNumero) { status.textContent = 'No se encontró el pedido.'; status.style.color = 'var(--danger)'; return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Subiendo...';
+      status.textContent = '';
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const res = await fetch(API + '/api/orders/' + lastOrderNumero + '/comprobante', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefono: lastOrderTelefono, imagen: reader.result })
+          });
+          const data = await res.json();
+          if (data.success) {
+            status.textContent = '✅ Comprobante recibido, ¡gracias!';
+            status.style.color = 'var(--success)';
+            btn.textContent = 'Comprobante subido';
+          } else {
+            status.textContent = data.error || 'No se pudo subir el comprobante.';
+            status.style.color = 'var(--danger)';
+            btn.disabled = false;
+            btn.textContent = 'Subir comprobante';
+          }
+        } catch (err) {
+          status.textContent = 'Error de conexión.';
+          status.style.color = 'var(--danger)';
+          btn.disabled = false;
+          btn.textContent = 'Subir comprobante';
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
     function newOrder() {
       cart = {};
       customBox = null;
@@ -2214,7 +2285,11 @@
       document.getElementById('direccion').value = '';
       document.getElementById('sector').value = '';
       document.getElementById('observaciones').value = '';
+      document.getElementById('fecha-entrega').value = '';
+      document.getElementById('comprobante-upload').style.display = 'none';
+      document.getElementById('comprobante-status').textContent = '';
       document.getElementById('order-form').style.display = 'block';
+      document.getElementById('catalog-section').style.display = 'block';
       document.getElementById('success-screen').classList.remove('show');
       renderProducts();
       showBoxButton();
@@ -2233,6 +2308,10 @@
     loadConfig();
     loadProducts();
     loadOffers();
+
+    // No dejar elegir una fecha de entrega ya pasada.
+    const fechaEntregaInput = document.getElementById('fecha-entrega');
+    if (fechaEntregaInput) fechaEntregaInput.min = new Date().toISOString().split('T')[0];
 
     function getBoxProduct() {
       return products.find(function(p) { return p.tipo === 'caja'; }) || null;

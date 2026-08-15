@@ -131,30 +131,52 @@ async function checkIngredientStock(cartItems) {
   return { ok: true };
 }
 
+// Núcleo atómico compartido: descuenta una lista de líneas
+// { ingredienteId, cantidad, motivo, referencia } una por una, cada una con
+// una sola sentencia UPDATE...WHERE stock >= cantidad (mismo patrón que
+// decrementarAtomico en inventory.js). Si alguna no alcanza, revierte lo ya
+// consumido en esta llamada y devuelve { ok:false, error }.
+async function consumirAtomico(lineas) {
+  const consumido = [];
+  for (const { ingredienteId, cantidad, motivo, referencia } of lineas) {
+    if (!cantidad || cantidad <= 0) continue;
+    const ing = await prepare('SELECT * FROM ingredientes WHERE id = ?').get(ingredienteId);
+    if (!ing) continue;
+
+    const result = await prepare('UPDATE ingredientes SET stock = stock - ? WHERE id = ? AND stock >= ?').run(cantidad, ing.id, cantidad);
+    if (!result.changes) {
+      for (const c of consumido) {
+        await prepare('UPDATE ingredientes SET stock = stock + ? WHERE id = ?').run(c.cantidad, c.id);
+      }
+      return { ok: false, error: `No hay suficiente "${ing.nombre}" para preparar el pedido.` };
+    }
+
+    consumido.push({ id: ing.id, cantidad });
+    const despues = await prepare('SELECT stock FROM ingredientes WHERE id = ?').get(ing.id);
+    await logMovement(ing.id, 'consumo', cantidad, ing.stock, despues.stock, cantidad * (Number(ing.costo_unitario) || 0), motivo, referencia, 'sistema');
+  }
+  checkAndNotifyLowStock().catch(e => console.error('[Ingredientes] Error verificando stock bajo:', e.message));
+  return { ok: true };
+}
+
 // Descuenta los ingredientes que corresponden a lo vendido en un pedido,
 // según la receta de cada producto (cartItems: [{id, qty}]). Si un producto
 // no tiene receta cargada, simplemente no consume nada (no rompe la venta).
 async function consumeForOrder(cartItems, referencia) {
+  const lineas = [];
   for (const item of (cartItems || [])) {
     const qty = parseInt(item.qty) || 0;
     if (qty <= 0) continue;
     const prod = await prepare('SELECT receta FROM productos WHERE id = ?').get(item.id);
     if (!prod || !prod.receta) continue;
     const receta = parseRecetaPorUnidad(prod.receta);
-    if (receta.length === 0) continue;
-
     for (const linea of receta) {
-      const ing = await prepare('SELECT * FROM ingredientes WHERE id = ?').get(linea.ingrediente_id);
-      if (!ing) continue;
       const consumo = (Number(linea.cantidad) || 0) * qty;
       if (consumo <= 0) continue;
-      const anterior = Number(ing.stock) || 0;
-      const nuevo = Math.max(0, anterior - consumo);
-      await prepare('UPDATE ingredientes SET stock = ? WHERE id = ?').run(nuevo, ing.id);
-      await logMovement(ing.id, 'consumo', consumo, anterior, nuevo, consumo * (Number(ing.costo_unitario) || 0), 'Venta #' + referencia, referencia, 'sistema');
+      lineas.push({ ingredienteId: linea.ingrediente_id, cantidad: consumo, motivo: 'Venta #' + referencia, referencia });
     }
   }
-  checkAndNotifyLowStock().catch(e => console.error('[Ingredientes] Error verificando stock bajo:', e.message));
+  return consumirAtomico(lineas);
 }
 
 // Revisa qué ingredientes activos están en el mínimo o menos y todavía no
@@ -174,27 +196,67 @@ async function checkAndNotifyLowStock() {
   }
 }
 
-// Reverso de consumeForOrder cuando un pedido se cancela. Idempotente: si ya
-// se devolvió este pedido, no vuelve a sumar.
+// Reverso de consumeForOrder cuando un pedido se cancela. Devuelve la
+// diferencia neta entre lo consumido y lo ya devuelto según la bitácora
+// (igual idea que restoreStockForOrder en inventory.js), así que soporta
+// cancelar y reactivar el mismo pedido varias veces sin perder la cuenta.
 async function restoreForOrder(referencia) {
   const ref = String(referencia);
   const refLegacy = ref + '.0'; // ver nota en inventory.js sobre el driver de la base de datos
-  const yaRestaurado = await prepare("SELECT 1 FROM movimientos_ingredientes WHERE referencia IN (?, ?) AND tipo = 'devolucion' LIMIT 1").get(ref, refLegacy);
-  if (yaRestaurado) return;
 
-  const consumos = await prepare("SELECT ingrediente_id, cantidad FROM movimientos_ingredientes WHERE referencia IN (?, ?) AND tipo = 'consumo'").all(ref, refLegacy);
-  for (const m of consumos) {
-    const ing = await prepare('SELECT * FROM ingredientes WHERE id = ?').get(m.ingrediente_id);
+  const movimientos = await prepare(
+    "SELECT ingrediente_id, tipo, cantidad FROM movimientos_ingredientes WHERE referencia IN (?, ?) AND tipo IN ('consumo', 'devolucion')"
+  ).all(ref, refLegacy);
+
+  const netConsumido = {};
+  for (const m of movimientos) {
+    const signo = m.tipo === 'consumo' ? 1 : -1;
+    netConsumido[m.ingrediente_id] = (netConsumido[m.ingrediente_id] || 0) + signo * m.cantidad;
+  }
+
+  for (const [ingredienteId, cantidad] of Object.entries(netConsumido)) {
+    if (cantidad <= 0) continue; // ya estaba devuelto (o nunca se consumió)
+    const ing = await prepare('SELECT * FROM ingredientes WHERE id = ?').get(ingredienteId);
     if (!ing) continue;
     const anterior = Number(ing.stock) || 0;
-    const nuevo = anterior + Number(m.cantidad);
+    const nuevo = anterior + cantidad;
     await prepare(`
       UPDATE ingredientes
       SET stock = ?, alerta_enviada = CASE WHEN ? > stock_minimo THEN 0 ELSE alerta_enviada END
       WHERE id = ?
     `).run(nuevo, nuevo, ing.id);
-    await logMovement(ing.id, 'devolucion', Number(m.cantidad), anterior, nuevo, Number(m.cantidad) * (Number(ing.costo_unitario) || 0), 'Pedido #' + referencia + ' cancelado', ref, 'sistema');
+    await logMovement(ing.id, 'devolucion', cantidad, anterior, nuevo, cantidad * (Number(ing.costo_unitario) || 0), 'Pedido #' + referencia + ' cancelado', ref, 'sistema');
   }
+}
+
+// Vuelve a consumir los ingredientes que se habían devuelto al cancelar este
+// pedido, cuando se reactiva a un estado distinto de Cancelado.
+// restoreForOrder siempre devuelve TODO lo consumido en un solo movimiento
+// 'devolucion' por ingrediente, así que la última devolución de cada uno es
+// exactamente lo que hay que volver a consumir — deshacerla (en vez de
+// sumar/restar toda la bitácora) sigue siendo correcto después de varios
+// ciclos de cancelar/reactivar sobre el mismo pedido.
+async function reserveForOrder(referencia) {
+  const ref = String(referencia);
+  const refLegacy = ref + '.0';
+
+  const ultimasDevoluciones = await prepare(`
+    SELECT ingrediente_id, cantidad FROM movimientos_ingredientes
+    WHERE referencia IN (?, ?) AND tipo = 'devolucion' AND id IN (
+      SELECT MAX(id) FROM movimientos_ingredientes
+      WHERE referencia IN (?, ?) AND tipo = 'devolucion'
+      GROUP BY ingrediente_id
+    )
+  `).all(ref, refLegacy, ref, refLegacy);
+
+  const lineas = ultimasDevoluciones.map(m => ({
+    ingredienteId: m.ingrediente_id,
+    cantidad: m.cantidad,
+    motivo: 'Pedido #' + referencia + ' reactivado',
+    referencia: ref
+  }));
+
+  return consumirAtomico(lineas);
 }
 
 // Costo de producir una unidad de un producto, según su receta actual.
@@ -263,6 +325,6 @@ async function getCostoVentas(fechaInicio, fechaFin) {
 module.exports = {
   getIngredients, createIngredient, updateIngredient, deleteIngredient,
   restockIngredient, adjustIngredient, checkIngredientStock,
-  consumeForOrder, restoreForOrder, getCostoProducto,
+  consumeForOrder, restoreForOrder, reserveForOrder, getCostoProducto,
   getMovements, getSummary, getCostoVentas, checkAndNotifyLowStock
 };

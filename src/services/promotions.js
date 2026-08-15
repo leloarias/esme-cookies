@@ -20,33 +20,39 @@ function filtrarPromocionesVigentes(promos, currentDate, currentTime) {
   });
 }
 
-// Monto del carrito sobre el que realmente aplica un descuento_pct/fijo:
-// "Todos" es el subtotal completo, pero "Por categoría" o "Productos
-// específicos" deben limitarse a esos items — si no, un 10% "solo para
-// Bebidas" terminaría descontando el pedido entero.
-function baseAplicablePromo(promo, cartItemsArr, subTotalNum) {
+// Items del carrito a los que realmente aplica una promo con alcance
+// limitado: "Todos" es el carrito completo, pero "Por categoría" o
+// "Productos específicos" deben limitarse a esos items — si no, una promo
+// "solo para Bebidas" terminaría aplicando sobre el pedido entero.
+function itemsAplicablesPromo(promo, cartItemsArr) {
   if (promo.aplica_a === 'categoria' && promo.categoria && promo.categoria !== 'todos') {
-    return cartItemsArr
-      .filter(item => (item.categoria || '') === promo.categoria)
-      .reduce((s, item) => s + item.precio * item.qty, 0);
+    return cartItemsArr.filter(item => (item.categoria || '') === promo.categoria);
   }
   if (promo.aplica_a === 'especificos' && promo.productos_ids) {
     let ids = [];
     try { ids = JSON.parse(promo.productos_ids); } catch (e) { ids = []; }
     if (Array.isArray(ids) && ids.length > 0) {
-      return cartItemsArr
-        .filter(item => ids.includes(item.id))
-        .reduce((s, item) => s + item.precio * item.qty, 0);
+      return cartItemsArr.filter(item => ids.includes(item.id));
     }
   }
-  return subTotalNum;
+  return cartItemsArr;
+}
+
+// Monto del carrito sobre el que realmente aplica un descuento_pct/fijo.
+function baseAplicablePromo(promo, cartItemsArr, subTotalNum) {
+  const items = itemsAplicablesPromo(promo, cartItemsArr);
+  if (items === cartItemsArr) return subTotalNum;
+  return items.reduce((s, item) => s + item.precio * item.qty, 0);
 }
 
 // Evalúa las promociones vigentes contra el carrito y devuelve el descuento
 // total sobre productos, el descuento de envío y las promos aplicadas.
-// ctx: { subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr, clientePedidos }
+// ctx: { subTotalNum, tipoEntrega, totalItems, envio, cartItemsArr, clientePedidos, hasBox }
+// hasBox lo calcula orders.routes.js contra productos.box_config (tamaño y
+// productos realmente permitidos) — acá solo se consume el resultado, esta
+// función se mantiene pura/sin acceso a la base para poder testearla sola.
 function evaluarPromociones(promosActivas, ctx) {
-  const { subTotalNum, tipoEntrega, totalItems, envio, precio, cartItemsArr = [], clientePedidos = 0 } = ctx;
+  const { subTotalNum, tipoEntrega, totalItems, envio, cartItemsArr = [], clientePedidos = 0, hasBox = false } = ctx;
 
   let descuentoTotal = 0;
   let envioDescuento = 0;
@@ -79,13 +85,11 @@ function evaluarPromociones(promosActivas, ctx) {
       return;
     }
 
-    // Solo cajas: solo aplicar si el carrito tiene un item de tipo caja (id == 7)
-    if (promo.solo_cajas) {
-      const hasBox = cartItemsArr.some(item => Number(item.id) === 7);
-      if (!hasBox) {
-        console.log(`[Order Debug] Promo ${promo.titulo} rechazada: solo_cajas activo pero el carrito no tiene caja`);
-        return;
-      }
+    // Solo cajas: hasBox ya viene validado contra el tamaño y los productos
+    // permitidos de la caja (no solo "el carrito tiene el producto caja").
+    if (promo.solo_cajas && !hasBox) {
+      console.log(`[Order Debug] Promo ${promo.titulo} rechazada: solo_cajas activo pero no hay una caja completa y válida en el carrito`);
+      return;
     }
 
     switch (promo.tipo) {
@@ -122,25 +126,24 @@ function evaluarPromociones(promosActivas, ctx) {
           aplica = true;
         }
         break;
-      case 'bogo':
-        if (totalItems >= 3) {
-          let precios = [];
-          if (cartItemsArr.length > 0) {
-            cartItemsArr.forEach(item => {
-              for (let i = 0; i < item.qty; i++) precios.push(item.precio);
-            });
-          } else if (precio) {
-            precios = String(precio).split(',').map(p => parseFloat(p.trim()) || 0).filter(p => p > 0);
-          }
+      case 'bogo': {
+        // Igual que descuento_pct/fijo: si la promo se limitó a una
+        // categoría o productos específicos, el "lleva 3 y paga 2" cuenta
+        // solo esos items, no el carrito entero.
+        const itemsAplicables = itemsAplicablesPromo(promo, cartItemsArr);
+        let precios = [];
+        itemsAplicables.forEach(item => {
+          for (let i = 0; i < item.qty; i++) precios.push(item.precio);
+        });
 
-          if (precios.length >= 3) {
-            const gruposGratuitos = Math.floor(precios.length / 3);
-            precios.sort((a, b) => a - b);
-            ahorro = precios.slice(0, gruposGratuitos).reduce((a, b) => a + b, 0);
-            aplica = true;
-          }
+        if (precios.length >= 3) {
+          const gruposGratuitos = Math.floor(precios.length / 3);
+          precios.sort((a, b) => a - b);
+          ahorro = precios.slice(0, gruposGratuitos).reduce((a, b) => a + b, 0);
+          aplica = true;
         }
         break;
+      }
     }
 
     if (aplica && ahorro > 0) {

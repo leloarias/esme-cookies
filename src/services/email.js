@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const { prepare } = require('../db');
 const { normalizePhone } = require('../utils/helpers');
+const { decrypt } = require('../utils/crypto');
 
 function getTransporter(config) {
   return nodemailer.createTransport({
@@ -9,7 +10,7 @@ function getTransporter(config) {
     secure: !!config.emailSecure,
     auth: {
       user: config.emailUser,
-      pass: config.emailPass
+      pass: decrypt(config.emailPass)
     },
     pool: true,
     maxConnections: 1,

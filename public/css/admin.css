@@ -697,15 +697,15 @@
       background: var(--white);
       border-radius: 16px;
       width: 100%;
-      max-width: 500px;
+      max-width: 580px;
       max-height: 90vh;
       overflow-y: auto;
     }
 
-    .modal-lg { max-width: 800px; }
+    .modal-lg { max-width: 920px; }
 
     .modal-wide {
-      max-width: 720px;
+      max-width: 840px;
     }
 
     .modal-header {

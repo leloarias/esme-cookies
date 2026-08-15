@@ -84,7 +84,16 @@
     
     var socket = io();
     var pendingOrders = [];
-    
+
+    // El servidor solo manda 'nuevo_pedido' (trae datos del cliente) a la
+    // sala 'admins'. Hay que autenticar el socket con el token de sesión
+    // para unirse — se repite en cada conexión/reconexión.
+    function authSocket() {
+      var token = sessionStorage.getItem('admin_token');
+      if (token) socket.emit('admin:auth', token);
+    }
+    socket.on('connect', authSocket);
+
     socket.on('nuevo_pedido', function(pedido) {
       // Añadir a lista de pedidos pendientes
       pendingOrders.push(pedido);
@@ -122,6 +131,11 @@
     socket.on('promo_expirada', function(p) {
       showToast('✨ La oferta "' + p.titulo + '" ha terminado automáticamente.', 'warning');
       loadPromos();
+    });
+
+    socket.on('comprobante_subido', function(p) {
+      showToast('📎 ' + (p.cliente || 'Un cliente') + ' subió el comprobante del pedido #' + String(p.numero).padStart(4, '0'), 'success');
+      loadDataSilently();
     });
     
     function showFloatingNotification(pedido) {
@@ -209,6 +223,7 @@
           sessionStorage.setItem('admin_logged', 'true');
           sessionStorage.setItem('admin_token', data.token);
           sessionStorage.setItem('admin_id', data.adminId);
+          authSocket();
           document.getElementById('login-screen').classList.add('hidden');
           document.getElementById('admin-panel').classList.remove('hidden');
           checkNotificationStatus();
@@ -920,67 +935,67 @@
     // Mensajes predeterminados
     var DEFAULT_MSG = {
       msgEsperandoPago: `*¡HOLA {{cliente}}!*
-Recibimos tu pedido #{{numero}} 🎉
+Recibimos tu pedido #{{numero}}
 
-📋 *DATOS DEL PEDIDO*
+*DATOS DEL PEDIDO*
 ─────────────────
-👤 Cliente: {{cliente}}
-🚚 Entrega: {{tipo_entrega}}
-📦 Productos:
+Cliente: {{cliente}}
+Entrega: {{tipo_entrega}}
+Productos:
 {{productos}}
 ─────────────────
-💰 *TOTAL A PAGAR: RD$ {{total}}*
+*TOTAL A PAGAR: RD$ {{total}}*
 ─────────────────
 
-💳 *CUENTAS PARA TRANSFERENCIA:*
+*CUENTAS PARA TRANSFERENCIA:*
 {{cuentas_bancarias}}
 
-⏳ *PRÓXIMO PASO*
+*PRÓXIMO PASO*
 Por favor, realiza la transferencia y envíame el comprobante aquí.
 Una vez confirmado tu pago, comenzaremos a preparar tu pedido.
 
-📍 *SIGUE TU PEDIDO:*
+*SIGUE TU PEDIDO:*
 {{tracking_url}}
 
-¡Gracias por tu compra! 🍪`,
-      msgPagoConfirmado: `*¡PAGO CONFIRMADO! ✅*
+¡Gracias por tu compra!`,
+      msgPagoConfirmado: `*¡PAGO CONFIRMADO!*
 
 Pedido #{{numero}}
 Cliente: {{cliente}}
 
 Tu pago ha sido confirmado. Comenzaremos a preparar tu pedido pronto.
 
-📍 *SIGUE TU PEDIDO:*
+*SIGUE TU PEDIDO:*
 {{tracking_url}}
 
-¡Te avisaremos cuando esté listo! 🍪`,
-      msgPreparando: `*¡TU PEDIDO ESTÁ SIENDO PREPARADO! 🍪*
+¡Te avisaremos cuando esté listo!`,
+      msgPreparando: `*¡TU PEDIDO ESTÁ SIENDO PREPARADO!*
 
 Pedido #{{numero}}
 Cliente: {{cliente}}
 
-Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo para recoger o entregar. 🎉
+Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo para recoger o entregar.
 
-📍 *SIGUE TU PEDIDO:*
+*SIGUE TU PEDIDO:*
 {{tracking_url}}`,
-      msgListo: `🎉 *¡TU PEDIDO ESTÁ LISTO!*
+      msgListo: `*¡TU PEDIDO ESTÁ LISTO!*
 
 Pedido #{{numero}}
 
 {{entrega_info}}
 
-📍 *SIGUE TU PEDIDO:*
+*SIGUE TU PEDIDO:*
 {{tracking_url}}
 
-¡Gracias por tu compra! 🍪`,
-      msgEntregado: `*¡PEDIDO ENTREGADO! 🎉*
+¡Gracias por tu compra!`,
+      msgEntregado: `*¡PEDIDO ENTREGADO!*
 
 Pedido #{{numero}}
 Cliente: {{cliente}}
 
 Tu pedido ha sido entregado exitosamente.
 
-¡Gracias por tu compra! Vuelve pronto 🍪`,
+¡Gracias por tu compra! Vuelve pronto`,
       msgCancelado: `*PEDIDO CANCELADO*
 
 Pedido #{{numero}}
@@ -1325,11 +1340,223 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       renderDashboard();
     }
 
-    function exportToExcel() {
+    // --- Utilidades para reportes Excel, con ExcelJS: a diferencia de la
+    // librería que se usaba antes (SheetJS "xlsx" gratuita, que no escribe
+    // estilos en el archivo aunque el código no falle), esta sí guarda
+    // colores y formato reales — se verificó generando un archivo y
+    // releyéndolo antes de cambiarla.
+    var COLOR_TITULO = 'FFC9883A';     // dorado de marca
+    var COLOR_ENCABEZADO = 'FF2C1810'; // marrón de marca
+    var COLOR_LETRA = 'FFFFFFFF';
+
+    function nuevaHoja(workbook, nombre, anchos) {
+      var hoja = workbook.addWorksheet(nombre);
+      hoja.columns = anchos.map(function(w) { return { width: w }; });
+      return hoja;
+    }
+
+    function colorearFila(fila, numCols, fondoARGB, tamano) {
+      for (var c = 1; c <= numCols; c++) {
+        var cell = fila.getCell(c);
+        cell.font = { bold: true, color: { argb: COLOR_LETRA }, size: tamano || 11 };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fondoARGB } };
+        cell.alignment = { vertical: 'middle' };
+      }
+      fila.height = tamano ? 26 : 20;
+    }
+
+    // Título principal en dorado de marca; encabezados de tabla en marrón
+    // de marca con letra blanca — mismos colores que el resto del panel.
+    function agregarTitulo(hoja, texto, numCols) {
+      var fila = hoja.addRow([texto]);
+      colorearFila(fila, numCols, COLOR_TITULO, 13);
+      return fila;
+    }
+
+    function agregarEncabezado(hoja, valores) {
+      var fila = hoja.addRow(valores);
+      colorearFila(fila, valores.length, COLOR_ENCABEZADO);
+      return fila;
+    }
+
+    // Número real (para que Excel pueda sumarlo/graficarlo) con formato de
+    // moneda dominicana, en vez del truco viejo de una columna de texto
+    // "RD$" al lado del valor.
+    function celdaMoneda(fila, col, valor) {
+      var cell = fila.getCell(col);
+      cell.value = Number(valor) || 0;
+      cell.numFmt = '"RD$" #,##0.00';
+      return cell;
+    }
+
+    // Dispara la descarga del libro en el navegador (ExcelJS no tiene un
+    // "writeFile" para browser: arma el archivo en memoria y lo baja como
+    // blob, como cualquier descarga generada en el cliente).
+    async function descargarLibro(workbook, filename) {
+      var buffer = await workbook.xlsx.writeBuffer();
+      var blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    // Arma el libro de Excel (resumen general + detalle, y desglose por mes
+    // si hay más de uno) a partir de una lista de pedidos ya filtrada. Tanto
+    // el reporte del Dashboard como el de la pestaña Pedidos llamaban a esta
+    // misma lógica pero copiada dos veces — ahora es una sola función real,
+    // cada exportador solo decide qué pedidos entran y con qué nombre se
+    // descarga el archivo.
+    function construirLibroReporteVentas(filteredOrders) {
+      // Agrupar pedidos por mes
+      var ordersByMonth = {};
+      filteredOrders.forEach(function(o) {
+        var d = parseDate(o.fecha);
+        if (!d || isNaN(d.getTime())) return;
+        var mesKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        var mesNombre = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        if (!ordersByMonth[mesKey]) {
+          ordersByMonth[mesKey] = { nombre: mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1), orders: [] };
+        }
+        ordersByMonth[mesKey].orders.push(o);
+      });
+
+      var workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Esme Cookies';
+      workbook.created = new Date();
+
+      function agregarHojaResumen(nombreHoja, monthOrders, mesNombre) {
+        var hoja = nuevaHoja(workbook, nombreHoja, [28, 20, 10]);
+
+        agregarTitulo(hoja, 'ESME COOKIES - REPORTE DE VENTAS', 3);
+        hoja.addRow(['Mes: ' + mesNombre]);
+        hoja.addRow(['Fecha de Generación: ' + new Date().toLocaleDateString('es-DO')]);
+        hoja.addRow([]);
+
+        agregarEncabezado(hoja, ['RESUMEN EJECUTIVO', '', '']);
+
+        var totalVentasNetas = monthOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (o.total || 0) : 0); }, 0);
+        var totalDescuentos = monthOrders.reduce(function(s, o) { return s + (o.descuento || 0); }, 0);
+        var totalEnvios = monthOrders.reduce(function(s, o) { return s + (o.envio || 0); }, 0);
+        var totalSubtotal = monthOrders.reduce(function(s, o) { return s + (o.subtotal || 0); }, 0);
+        var pedidosActivos = monthOrders.filter(function(o) { return o.estado !== 'Cancelado'; }).length;
+        var ticketsPromedio = pedidosActivos > 0 ? Math.round(totalVentasNetas / pedidosActivos) : 0;
+
+        celdaMoneda(hoja.addRow(['Ventas Brutas:']), 2, totalSubtotal);
+        celdaMoneda(hoja.addRow(['Total Descuentos:']), 2, totalDescuentos);
+        celdaMoneda(hoja.addRow(['Total Envíos:']), 2, totalEnvios);
+        celdaMoneda(hoja.addRow(['VENTAS NETAS:']), 2, totalVentasNetas);
+        celdaMoneda(hoja.addRow(['Ticket Promedio:']), 2, ticketsPromedio);
+        hoja.addRow(['Total Pedidos:', monthOrders.length]);
+        hoja.addRow([]);
+
+        // Por Estado
+        agregarEncabezado(hoja, ['POR ESTADO', '', '']);
+        agregarEncabezado(hoja, ['Estado', 'Cantidad', '%']);
+        hoja.addRow(['Pendientes', monthOrders.filter(function(o) { return o.estado === 'Pendiente'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Pendiente'; }).length / monthOrders.length * 100) + '%']);
+        hoja.addRow(['Confirmados', monthOrders.filter(function(o) { return o.estado === 'Confirmado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Confirmado'; }).length / monthOrders.length * 100) + '%']);
+        hoja.addRow(['Entregados', monthOrders.filter(function(o) { return o.estado === 'Entregado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Entregado'; }).length / monthOrders.length * 100) + '%']);
+        hoja.addRow(['Cancelados', monthOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length / monthOrders.length * 100) + '%']);
+        hoja.addRow([]);
+
+        // Por Método de Pago
+        agregarEncabezado(hoja, ['POR MÉTODO DE PAGO', '', '']);
+        agregarEncabezado(hoja, ['Método', 'Total', '']);
+        var pagos = {};
+        monthOrders.forEach(function(o) {
+          if (o.estado !== 'Cancelado') {
+            var metodo = o.pago || 'No especificado';
+            pagos[metodo] = (pagos[metodo] || 0) + (o.total || 0);
+          }
+        });
+        for (var metodo in pagos) {
+          celdaMoneda(hoja.addRow([metodo]), 2, pagos[metodo]);
+        }
+        hoja.addRow([]);
+
+        // Por Tipo de Entrega
+        agregarEncabezado(hoja, ['POR TIPO DE ENTREGA', '', '']);
+        agregarEncabezado(hoja, ['Tipo', 'Pedidos', '']);
+        var entregas = {};
+        monthOrders.forEach(function(o) {
+          if (o.estado !== 'Cancelado') {
+            var tipo = o.tipo_entrega === 'pickup' ? 'Pasar a buscar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envío Nacional' : 'No especificado';
+            entregas[tipo] = (entregas[tipo] || 0) + 1;
+          }
+        });
+        for (var tipo in entregas) {
+          hoja.addRow([tipo, entregas[tipo]]);
+        }
+      }
+
+      function agregarHojaDetalle(nombreHoja, detalleOrders) {
+        var hoja = nuevaHoja(workbook, nombreHoja, [9, 12, 22, 14, 16, 40, 13, 12, 10, 13, 14, 14, 14, 32, 30]);
+        agregarEncabezado(hoja, ['#', 'Fecha', 'Cliente', 'Teléfono', 'Tipo Entrega', 'Productos', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Pago', 'Estado', 'Entrega Deseada', 'Promociones', 'Comprobante']);
+
+        detalleOrders.forEach(function(o) {
+          var promos = [];
+          try {
+            if (o.promociones_aplicadas) {
+              promos = JSON.parse(o.promociones_aplicadas);
+            }
+          } catch(e) { promos = []; }
+          var promosTexto = promos.map(function(p) { return p.titulo + ' (-RD$' + p.descuento + ')'; }).join('; ');
+
+          var productos = (o.productos || '').replace(/\n/g, ', ');
+          var tipoTxt = o.tipo_entrega === 'pickup' ? 'Pasar a buscar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envío Nacional' : '';
+
+          var fila = hoja.addRow([
+            '#' + (o.numero || ''),
+            o.fecha || '',
+            o.cliente || '',
+            o.telefono || '',
+            tipoTxt,
+            productos,
+            null, null, null, null,
+            o.pago || '',
+            o.estado || '',
+            o.fecha_entrega || '',
+            promosTexto,
+            o.comprobante_url ? 'Ver comprobante' : ''
+          ]);
+          if (o.comprobante_url) {
+            fila.getCell(15).value = { text: 'Ver comprobante', hyperlink: o.comprobante_url };
+            fila.getCell(15).font = { color: { argb: 'FF2C6FBB' }, underline: true };
+          }
+          celdaMoneda(fila, 7, o.subtotal);
+          celdaMoneda(fila, 8, o.descuento);
+          celdaMoneda(fila, 9, o.envio);
+          celdaMoneda(fila, 10, o.total);
+        });
+      }
+
+      // El resumen general va primero siempre — es lo primero que se ve al
+      // abrir el archivo. El desglose mes por mes (si hay más de uno) queda
+      // después, en vez de al final como antes.
+      var hayVariosMeses = Object.keys(ordersByMonth).length > 1;
+      agregarHojaResumen(hayVariosMeses ? 'Resumen General' : 'Resumen', filteredOrders, 'Todos');
+      agregarHojaDetalle('Pedidos', filteredOrders);
+
+      if (hayVariosMeses) {
+        for (var mesKey in ordersByMonth) {
+          var mesData = ordersByMonth[mesKey];
+          agregarHojaResumen('Resumen ' + mesData.nombre.substring(0, 3), mesData.orders, mesData.nombre);
+          agregarHojaDetalle('Pedidos ' + mesData.nombre.substring(0, 3), mesData.orders);
+        }
+      }
+
+      return workbook;
+    }
+
+    async function exportToExcel() {
       var year = (document.getElementById('dash-filter-year') || {}).value;
       var month = (document.getElementById('dash-filter-month') || {}).value;
       var day = (document.getElementById('dash-filter-day') || {}).value;
-      
+
       var filteredOrders = orders.filter(function (o) {
         if (year || month || day) {
           var d = parseDate(o.fecha);
@@ -1346,157 +1573,8 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         return;
       }
 
-      // Agrupar pedidos por mes
-      var ordersByMonth = {};
-      filteredOrders.forEach(function(o) {
-        var d = parseDate(o.fecha);
-        if (!d || isNaN(d.getTime())) return;
-        var mesKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        var mesNombre = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-        if (!ordersByMonth[mesKey]) {
-          ordersByMonth[mesKey] = { nombre: mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1), orders: [] };
-        }
-        ordersByMonth[mesKey].orders.push(o);
-      });
-
-      // Crear libro de Excel
-      var wb = XLSX.utils.book_new();
-      
-      // Función para crear tabla de resumen
-      function crearResumenMensual(monthOrders, mesNombre) {
-        var wsData = [];
-        
-        // Título
-        wsData.push([{ t: 's', v: 'ESME COOKIES - REPORTE DE VENTAS' }]);
-        wsData.push([{ t: 's', v: 'Mes: ' + mesNombre }]);
-        wsData.push([{ t: 's', v: 'Fecha de Generación: ' + new Date().toLocaleDateString('es-DO') }]);
-        wsData.push([]);
-        
-        // Resumen Ejecutivo
-        wsData.push([{ t: 's', v: 'RESUMEN EJECUTIVO' }]);
-        
-        var totalVentasNetas = monthOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (o.total || 0) : 0); }, 0);
-        var totalDescuentos = monthOrders.reduce(function(s, o) { return s + (o.descuento || 0); }, 0);
-        var totalEnvios = monthOrders.reduce(function(s, o) { return s + (o.envio || 0); }, 0);
-        var totalSubtotal = monthOrders.reduce(function(s, o) { return s + (o.subtotal || 0); }, 0);
-        var pedidosActivos = monthOrders.filter(function(o) { return o.estado !== 'Cancelado'; }).length;
-        var ticketsPromedio = pedidosActivos > 0 ? Math.round(totalVentasNetas / pedidosActivos) : 0;
-        
-        wsData.push(['Ventas Brutas:', totalSubtotal, 'RD$']);
-        wsData.push(['Total Descuentos:', totalDescuentos, 'RD$']);
-        wsData.push(['Total Envíos:', totalEnvios, 'RD$']);
-        wsData.push(['VENTAS NETAS:', totalVentasNetas, 'RD$']);
-        wsData.push(['Ticket Promedio:', ticketsPromedio, 'RD$']);
-        wsData.push(['Total Pedidos:', monthOrders.length, '']);
-        wsData.push([]);
-        
-        // Por Estado
-        wsData.push([{ t: 's', v: 'POR ESTADO' }]);
-        wsData.push(['Estado', 'Cantidad', '%']);
-        wsData.push(['Pendientes', monthOrders.filter(function(o) { return o.estado === 'Pendiente'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Pendiente'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push(['Confirmados', monthOrders.filter(function(o) { return o.estado === 'Confirmado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Confirmado'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push(['Entregados', monthOrders.filter(function(o) { return o.estado === 'Entregado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Entregado'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push(['Cancelados', monthOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push([]);
-        
-        // Por Método de Pago
-        wsData.push([{ t: 's', v: 'POR MÉTODO DE PAGO' }]);
-        wsData.push(['Método', 'Total', 'RD$']);
-        var pagos = {};
-        monthOrders.forEach(function(o) {
-          if (o.estado !== 'Cancelado') {
-            var metodo = o.pago || 'No especificado';
-            pagos[metodo] = (pagos[metodo] || 0) + (o.total || 0);
-          }
-        });
-        for (var metodo in pagos) {
-          wsData.push([metodo, pagos[metodo], 'RD$']);
-        }
-        wsData.push([]);
-        
-        // Por Tipo de Entrega
-        wsData.push([{ t: 's', v: 'POR TIPO DE ENTREGA' }]);
-        wsData.push(['Tipo', 'Pedidos']);
-        var entregas = {};
-        monthOrders.forEach(function(o) {
-          if (o.estado !== 'Cancelado') {
-            var tipo = o.tipo_entrega === 'pickup' ? 'Pasar a buscar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envío Nacional' : 'No especificado';
-            entregas[tipo] = (entregas[tipo] || 0) + 1;
-          }
-        });
-        for (var tipo in entregas) {
-          wsData.push([tipo, entregas[tipo]]);
-        }
-        
-        return wsData;
-      }
-      
-      // Función para crear detalle de pedidos
-      function crearDetallePedidos(monthOrders) {
-        var wsData = [];
-        
-        // Encabezados
-        wsData.push(['#', 'Fecha', 'Cliente', 'Teléfono', 'Tipo Entrega', 'Productos', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Pago', 'Estado', 'Promociones']);
-        
-        monthOrders.forEach(function(o) {
-          var promos = [];
-          try {
-            if (o.promociones_aplicadas) {
-              promos = JSON.parse(o.promociones_aplicadas);
-            }
-          } catch(e) { promos = []; }
-          var promosTexto = promos.map(function(p) { return p.titulo + ' (-RD$' + p.descuento + ')'; }).join('; ');
-          
-          var productos = (o.productos || '').replace(/\n/g, ', ');
-          var tipoTxt = o.tipo_entrega === 'pickup' ? 'Pasar a buscar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envío Nacional' : '';
-          
-          wsData.push([
-            '#' + (o.numero || ''),
-            o.fecha || '',
-            o.cliente || '',
-            o.telefono || '',
-            tipoTxt,
-            productos,
-            o.subtotal || 0,
-            o.descuento || 0,
-            o.envio || 0,
-            o.total || 0,
-            o.pago || '',
-            o.estado || '',
-            promosTexto
-          ]);
-        });
-        
-        return wsData;
-      }
-      
-      // Crear hojas por mes
-      for (var mesKey in ordersByMonth) {
-        var mesData = ordersByMonth[mesKey];
-        var mesNombre = mesData.nombre;
-        var monthOrders = mesData.orders;
-        
-        // Hoja de Resumen
-        var wsResumen = XLSX.utils.aoa_to_sheet(crearResumenMensual(monthOrders, mesNombre));
-        XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen ' + mesNombre.substring(0, 3));
-        
-        // Hoja de Detalle
-        var wsDetalle = XLSX.utils.aoa_to_sheet(crearDetallePedidos(monthOrders));
-        XLSX.utils.book_append_sheet(wb, wsDetalle, 'Pedidos ' + mesNombre.substring(0, 3));
-      }
-      
-      // Hoja General (si hay más de un mes)
-      if (Object.keys(ordersByMonth).length > 1) {
-        var wsGeneral = XLSX.utils.aoa_to_sheet(crearResumenMensual(filteredOrders, 'Todos'));
-        XLSX.utils.book_append_sheet(wb, wsGeneral, 'General');
-        
-        var wsDetalleGeneral = XLSX.utils.aoa_to_sheet(crearDetallePedidos(filteredOrders));
-        XLSX.utils.book_append_sheet(wb, wsDetalleGeneral, 'Todos los Pedidos');
-      }
-      
-      // Descargar
-      XLSX.writeFile(wb, 'ESME_Reporte_Ventas_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
-      
+      var workbook = construirLibroReporteVentas(filteredOrders);
+      await descargarLibro(workbook, 'ESME_Reporte_Ventas_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
       showToast('Reporte exportado exitosamente', 'success');
     }
 
@@ -1798,17 +1876,17 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       }
     }
 
-    function exportAccountingReport() {
+    async function exportAccountingReport() {
       var year = (document.getElementById('dash-filter-year') || {}).value;
       var month = (document.getElementById('dash-filter-month') || {}).value;
       var day = (document.getElementById('dash-filter-day') || {}).value;
-      
+
       var periodo = 'Período: ';
       if (year) periodo += year;
       if (month) periodo += '-' + month;
       if (day) periodo += '-' + day;
       if (!year && !month && !day) periodo = 'Período: Todos';
-      
+
       var dashOrders = orders.filter(function (o) {
         if (year || month || day) {
           var d = parseDate(o.fecha);
@@ -1819,7 +1897,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         }
         return true;
       });
-      
+
       var totalPedidos = dashOrders.length;
       var pedidosCancelados = dashOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length;
       var pedidosExitosos = totalPedidos - pedidosCancelados;
@@ -1827,31 +1905,58 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       var descuentosTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.descuento) || 0) : 0); }, 0);
       var envioTotal = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.envio) || 0) : 0); }, 0);
       var ventasNetas = dashOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (parseFloat(o.total) || 0) : 0); }, 0);
-      
-      var csv = 'ESME COOKIES - REPORTE CONTABLE\n';
-      csv += periodo + '\n\n';
-      csv += 'RESUMEN GENERAL\n';
-      csv += 'Total Pedidos,' + totalPedidos + '\n';
-      csv += 'Pedidos Exitosos,' + pedidosExitosos + '\n';
-      csv += 'Pedidos Cancelados,' + pedidosCancelados + '\n';
-      csv += 'Ventas Netas,RD$' + ventasNetas + '\n\n';
-      csv += 'ESTADO DE RESULTADOS\n';
-      csv += 'Ventas Brutas (Subtotal),RD$' + subtotalTotal + '\n';
-      csv += 'Descuentos Otorgados,-RD$' + descuentosTotal + '\n';
-      csv += 'Ingresos por Envío,RD$' + envioTotal + '\n';
-      csv += 'VENTAS NETAS,RD$' + ventasNetas + '\n\n';
-      csv += 'DETALLE DE PEDIDOS\n';
-      csv += '#,Fecha,Cliente,Estado,Subtotal,Descuento,Envio,Total\n';
+
+      // Mismo costo de ingredientes que se muestra en pantalla en el
+      // Reporte Contable del Dashboard (services/ingredients.js -> getCostoVentas),
+      // para que la ganancia neta del Excel coincida con la que ya ve el usuario ahí.
+      var range = getReportDateRange(year, month, day);
+      var costoIngredientes = 0;
+      try {
+        var cogsRes = await apiFetch(API_URL + '/api/ingredients/cogs?start=' + range.start + '&end=' + range.end);
+        if (cogsRes.ok) costoIngredientes = (await cogsRes.json()).costoVentas || 0;
+      } catch (e) { /* si falla, el reporte sigue sin esa línea en vez de romperse */ }
+      var gananciaNeta = ventasNetas - costoIngredientes;
+
+      var workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Esme Cookies';
+      workbook.created = new Date();
+
+      var hoja = nuevaHoja(workbook, 'Reporte Contable', [30, 20]);
+      agregarTitulo(hoja, 'ESME COOKIES - REPORTE CONTABLE', 2);
+      hoja.addRow([periodo]);
+      hoja.addRow(['Fecha de Generación: ' + new Date().toLocaleDateString('es-DO')]);
+      hoja.addRow([]);
+
+      agregarEncabezado(hoja, ['RESUMEN GENERAL', '']);
+      hoja.addRow(['Total Pedidos:', totalPedidos]);
+      hoja.addRow(['Pedidos Exitosos:', pedidosExitosos]);
+      hoja.addRow(['Pedidos Cancelados:', pedidosCancelados]);
+      hoja.addRow([]);
+
+      agregarEncabezado(hoja, ['ESTADO DE RESULTADOS', '']);
+      celdaMoneda(hoja.addRow(['Ventas Brutas (Subtotal):']), 2, subtotalTotal);
+      celdaMoneda(hoja.addRow(['(-) Descuentos Otorgados:']), 2, -descuentosTotal);
+      celdaMoneda(hoja.addRow(['(+) Ingresos por Envío:']), 2, envioTotal);
+      celdaMoneda(hoja.addRow(['= VENTAS NETAS:']), 2, ventasNetas);
+      celdaMoneda(hoja.addRow(['(-) Costo de Ingredientes:']), 2, -costoIngredientes);
+      var filaGanancia = hoja.addRow(['= GANANCIA NETA:']);
+      celdaMoneda(filaGanancia, 2, gananciaNeta);
+      colorearFila(filaGanancia, 2, gananciaNeta >= 0 ? 'FF27AE60' : 'FFE74C3C');
+      hoja.addRow([]);
+
+      agregarEncabezado(hoja, ['DETALLE DE PEDIDOS', '']);
+      var hojaDetalle = nuevaHoja(workbook, 'Detalle de Pedidos', [9, 12, 22, 16, 12, 12, 10, 13]);
+      agregarEncabezado(hojaDetalle, ['#', 'Fecha', 'Cliente', 'Estado', 'Subtotal', 'Descuento', 'Envío', 'Total']);
       dashOrders.forEach(function(o) {
-        csv += o.numero + ',' + (o.fecha || '') + ',' + '"' + (o.cliente || '') + '",' + (o.estado || '') + ',' + (o.subtotal || 0) + ',' + (o.descuento || 0) + ',' + (o.envio || 0) + ',' + (o.total || 0) + '\n';
+        var fila = hojaDetalle.addRow(['#' + o.numero, o.fecha || '', o.cliente || '', o.estado || '', null, null, null, null]);
+        celdaMoneda(fila, 5, o.subtotal);
+        celdaMoneda(fila, 6, o.descuento);
+        celdaMoneda(fila, 7, o.envio);
+        celdaMoneda(fila, 8, o.total);
       });
-      
-      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      var link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'reporte_contable_' + new Date().toISOString().split('T')[0] + '.csv';
-      link.click();
-      
+
+      await descargarLibro(workbook, 'reporte_contable_' + new Date().toISOString().split('T')[0] + '.xlsx');
+
       showToast('Reporte contable exportado', 'success');
     }
 
@@ -1908,7 +2013,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       pageOrders.forEach(function (o) {
         var badgeClass = getStateColor(o.estado);
         var tipoEntrega = o.tipo_entrega === 'pickup' ? 'Pasar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envio' : '-';
-        var nextState = getNextState(o.estado);
+        var nextState = getNextState(o.estado, !!o.comprobante_url);
         
         var btnLabel = '';
         var btnBg = '#6c757d';
@@ -2178,7 +2283,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
 
       var tipoTexto = editingOrder.tipo_entrega === 'pickup' ? 'Pasar a buscar' : editingOrder.tipo_entrega === 'delivery' ? 'Delivery' : editingOrder.tipo_entrega === 'envio' ? 'Envio' : 'No especificado';
       var badgeClass = getStateColor(editingOrder.estado);
-      var nextState = getNextState(editingOrder.estado);
+      var nextState = getNextState(editingOrder.estado, !!editingOrder.comprobante_url);
 
       var promosHtml = '';
       if (editingOrder.promociones_aplicadas) {
@@ -2240,6 +2345,10 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">👤 Cliente</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.cliente || '-') + '</div></div>';
       detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📱 Teléfono</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.telefono || '-') + '</div></div>';
       detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">🚚 Entrega</div><div style="font-weight:600;font-size:1rem;">' + tipoTexto + '</div></div>';
+      if (editingOrder.fecha_entrega) {
+        var fechaEntregaTexto = new Date(editingOrder.fecha_entrega + 'T00:00:00').toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' });
+        detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">🗓️ Entrega deseada</div><div style="font-weight:600;font-size:1rem;">' + fechaEntregaTexto + '</div></div>';
+      }
       if (editingOrder.direccion) {
         detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);grid-column:1/-1;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">📍 Dirección</div><div style="font-weight:600;font-size:1rem;">' + editingOrder.direccion + '</div></div>';
       }
@@ -2270,7 +2379,16 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       detallesHtml += '<div style="margin-bottom:24px;">';
       detallesHtml += '<h4 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">💳 Pago</h4>';
       detallesHtml += '<div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;">';
-      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Método</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.pago || 'Por definir') + '</div></div>';
+      detallesHtml += '<div style="background:white;padding:14px 16px;border-radius:10px;border:1px solid var(--warm);"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Método</div><div style="font-weight:600;font-size:1rem;">' + (editingOrder.pago || 'Por definir') + '</div>';
+      if (editingOrder.comprobante_url) {
+        detallesHtml += '<a href="' + editingOrder.comprobante_url + '" target="_blank" style="display:block;margin-top:10px;">';
+        detallesHtml += '<img src="' + editingOrder.comprobante_url + '" alt="Comprobante de pago" style="width:100%;max-width:160px;border-radius:8px;border:2px solid var(--success);cursor:zoom-in;">';
+        detallesHtml += '<div style="font-size:0.75rem;color:var(--success);margin-top:4px;font-weight:600;">📎 Ver comprobante</div>';
+        detallesHtml += '</a>';
+      } else if (editingOrder.pago === 'Transferencia') {
+        detallesHtml += '<div style="margin-top:10px;font-size:0.8rem;color:var(--text-muted);">📎 Sin comprobante adjunto</div>';
+      }
+      detallesHtml += '</div>';
       detallesHtml += '<div style="background:white;padding:16px 20px;border-radius:10px;border:1px solid var(--warm);">' + totalesHtml + '</div>';
       detallesHtml += '</div></div>';
 
@@ -2301,6 +2419,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       document.getElementById('edit-cliente').value = editingOrder.cliente || '';
       document.getElementById('edit-telefono').value = editingOrder.telefono || '';
       document.getElementById('edit-productos').value = editingOrder.productos || '';
+      document.getElementById('edit-fecha-entrega').value = editingOrder.fecha_entrega || '';
       document.getElementById('edit-envio').value = editingOrder.envio || 0;
       document.getElementById('edit-total').value = editingOrder.total || 0;
       document.getElementById('edit-estado').value = editingOrder.estado || 'Pendiente';
@@ -2345,6 +2464,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         cliente: document.getElementById('edit-cliente').value.trim(),
         telefono: document.getElementById('edit-telefono').value.trim(),
         productos: document.getElementById('edit-productos').value.trim(),
+        fecha_entrega: document.getElementById('edit-fecha-entrega').value || null,
         envio: parseFloat(document.getElementById('edit-envio').value) || 0,
         total: parseFloat(document.getElementById('edit-total').value) || 0,
         estado: document.getElementById('edit-estado').value,
@@ -2484,7 +2604,13 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       Cancelado: { next: null, icon: '❌', color: 'cancelled' }
     };
 
-    function getNextState(current) {
+    // Si el pedido ya tiene comprobante adjunto, "Esperando Pago" no tiene
+    // nada más que esperar — pasa directo a Confirmado en un solo clic, en
+    // vez de forzar a pasar por ese estado intermedio primero.
+    function getNextState(current, hasComprobante) {
+      if (hasComprobante && (current === 'Pendiente' || current === 'Esperando Pago')) {
+        return 'Confirmado';
+      }
       return ORDER_STATES[current] ? ORDER_STATES[current].next : null;
     }
     
@@ -2529,27 +2655,27 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         var cedulaUnica = todasIguales ? cedulas[0] : '';
 
         if (cedulaUnica) {
-          cuentasBancariasMsg += '\n📌 Cédula: ' + cedulaUnica;
+          cuentasBancariasMsg += '\nCédula: ' + cedulaUnica;
         }
 
         bankAccountsList.forEach(function(c, i) {
-          cuentasBancariasMsg += '\n\n🏦 Cuenta ' + (i + 1) + ':';
+          cuentasBancariasMsg += '\n\nCuenta ' + (i + 1) + ':';
           cuentasBancariasMsg += '\n' + c.banco;
           cuentasBancariasMsg += '\n' + c.tipo + ': ' + c.numero;
-          cuentasBancariasMsg += '\n👤 ' + c.titular;
+          cuentasBancariasMsg += '\nTitular: ' + c.titular;
           if (!cedulaUnica && c.cedula) {
-            cuentasBancariasMsg += '\n📌 Cédula: ' + c.cedula;
+            cuentasBancariasMsg += '\nCédula: ' + c.cedula;
           }
         });
       }
-      
+
       // Link a la página pública donde el cliente ve el estado de su pedido
       // en cualquier momento, sin depender de que le sigamos escribiendo.
       var trackingUrl = window.location.origin + '/seguimiento?tel=' + (order.telefono || '').replace(/\D/g, '');
       // Cómo se entrega, en texto — cambia según pickup/delivery/envío para
       // no decirle a un cliente de envío nacional que "pase a buscarlo".
       var entregaInfo = tipoEntrega === 'pickup'
-        ? 'Puedes pasar a buscarlo por:\n📍 ' + (currentConfig.pickupAddress || 'nuestra ubicación')
+        ? 'Puedes pasar a buscarlo por:\n' + (currentConfig.pickupAddress || 'nuestra ubicación')
         : tipoEntrega === 'delivery'
         ? 'Saldrá pronto hacia tu dirección.'
         : 'Ha sido enviado. Te llegará en los próximos días.';
@@ -2590,7 +2716,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       
       // Mensajes predeterminados si no hay plantilla personalizada
       if (nuevoEstado === 'Esperando Pago') {
-        var descuentoMsg = order.descuento > 0 ? '\n🎉 Descuento: -RD$ ' + (order.descuento || 0).toLocaleString() : '';
+        var descuentoMsg = order.descuento > 0 ? '\nDescuento: -RD$ ' + (order.descuento || 0).toLocaleString() : '';
         var bankMsg = '';
         if (bankAccountsList.length > 0) {
           // Verificar si todas las cédulas son iguales
@@ -2598,87 +2724,87 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           var todasIguales = cedulas.length > 1 && cedulas.every(function(c) { return c === cedulas[0]; });
           var cedulaUnica = todasIguales ? cedulas[0] : '';
 
-          bankMsg = '\n\n*💳 CUENTAS PARA TRANSFERENCIA:*';
+          bankMsg = '\n\n*CUENTAS PARA TRANSFERENCIA:*';
           if (cedulaUnica) {
-            bankMsg += '\n📌 Cédula: ' + cedulaUnica;
+            bankMsg += '\nCédula: ' + cedulaUnica;
           }
           bankAccountsList.forEach(function(c, i) {
-            bankMsg += '\n\n🏦 Cuenta ' + (i + 1) + ':\n' + c.banco + '\n' + c.tipo + ': ' + c.numero + '\n👤 ' + c.titular;
+            bankMsg += '\n\nCuenta ' + (i + 1) + ':\n' + c.banco + '\n' + c.tipo + ': ' + c.numero + '\nTitular: ' + c.titular;
             if (!cedulaUnica && c.cedula) {
-              bankMsg += '\n📌 Cédula: ' + c.cedula;
+              bankMsg += '\nCédula: ' + c.cedula;
             }
           });
         }
-        return '🍪 *ESME COOKIES*\n\n' +
+        return '*ESME COOKIES*\n\n' +
           '*¡HOLA ' + (order.cliente || '').toUpperCase() + '!*\n' +
-          'Recibimos tu pedido #' + String(order.numero).padStart(4, '0') + ' 🎉\n\n' +
-          '*📋 DATOS DEL PEDIDO*\n─────────────────\n' +
-          '👤 Cliente: ' + (order.cliente || '') + '\n' +
-          '🚚 Entrega: ' + tipoTexto + '\n' +
-          '📦 Productos:\n' + prods + '\n' +
+          'Recibimos tu pedido #' + String(order.numero).padStart(4, '0') + '\n\n' +
+          '*DATOS DEL PEDIDO*\n─────────────────\n' +
+          'Cliente: ' + (order.cliente || '') + '\n' +
+          'Entrega: ' + tipoTexto + '\n' +
+          'Productos:\n' + prods + '\n' +
           '─────────────────\n' +
-          '*💰 TOTAL A PAGAR: RD$ ' + (order.total || 0).toLocaleString() + '*' + descuentoMsg + '\n' +
-          '💳 Pago: ' + (order.pago || 'Por definir') + '\n' +
+          '*TOTAL A PAGAR: RD$ ' + (order.total || 0).toLocaleString() + '*' + descuentoMsg + '\n' +
+          'Pago: ' + (order.pago || 'Por definir') + '\n' +
           '─────────────────\n' +
           bankMsg + '\n\n' +
-          '*⏳ PRÓXIMO PASO*\n' +
+          '*PRÓXIMO PASO*\n' +
           'Por favor, realiza la transferencia y envíame el comprobante aquí.\n' +
           'Una vez confirmado tu pago, comenzaremos a preparar tu pedido.\n\n' +
-          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
-          '¡Gracias por tu compra! 🍪';
+          '*SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '¡Gracias por tu compra!';
       }
-      
+
       if (nuevoEstado === 'Confirmado') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡PAGO CONFIRMADO! ✅*\n\n' +
+        return '*ESME COOKIES*\n\n' +
+          '*¡PAGO CONFIRMADO!*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Tu pago ha sido confirmado. Comenzaremos a preparar tu pedido pronto.\n\n' +
-          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
-          '¡Te avisaremos cuando esté listo! 🍪';
+          '*SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '¡Te avisaremos cuando esté listo!';
       }
 
       if (nuevoEstado === 'Preparando') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡TU PEDIDO ESTÁ SIENDO PREPARADO! 🍪*\n\n' +
+        return '*ESME COOKIES*\n\n' +
+          '*¡TU PEDIDO ESTÁ SIENDO PREPARADO!*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Estamos preparando tu pedido con mucho cuidado. Te avisamos pronto cuando esté listo.\n\n' +
-          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + ' 🎉';
+          '*SIGUE TU PEDIDO:*\n' + trackingUrl;
       }
-      
+
       if (nuevoEstado === 'Listo') {
-        var listoMsg = tipoEntrega === 'pickup' 
-          ? '🎉 *¡TU PEDIDO ESTÁ LISTO!*\n\nPuedes pasar a buscarlo por:\n📍 ' + (currentConfig.pickupAddress || 'nuestra ubicación')
+        var listoMsg = tipoEntrega === 'pickup'
+          ? '*¡TU PEDIDO ESTÁ LISTO!*\n\nPuedes pasar a buscarlo por:\n' + (currentConfig.pickupAddress || 'nuestra ubicación')
           : tipoEntrega === 'delivery'
-          ? '🎉 *¡TU PEDIDO ESTÁ LISTO!*\n\nSaldrá pronto hacia tu dirección.'
-          : '🎉 *¡TU PEDIDO HA SIDO ENVIADO!*\n\nTe llegará en los próximos días.';
-        return '🍪 *ESME COOKIES*\n\n' + listoMsg + '\n\n' +
+          ? '*¡TU PEDIDO ESTÁ LISTO!*\n\nSaldrá pronto hacia tu dirección.'
+          : '*¡TU PEDIDO HA SIDO ENVIADO!*\n\nTe llegará en los próximos días.';
+        return '*ESME COOKIES*\n\n' + listoMsg + '\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
-          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
-          '¡Gracias por tu compra! 🍪';
+          '*SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '¡Gracias por tu compra!';
       }
 
       if (nuevoEstado === 'Entregado') {
-        return '🍪 *ESME COOKIES*\n\n' +
-          '*¡PEDIDO ENTREGADO! 🎉*\n\n' +
+        return '*ESME COOKIES*\n\n' +
+          '*¡PEDIDO ENTREGADO!*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Tu pedido ha sido entregado exitosamente.\n\n' +
-          '*📍 SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
-          '¡Gracias por tu compra! Vuelve pronto 🍪';
+          '*SIGUE TU PEDIDO:*\n' + trackingUrl + '\n\n' +
+          '¡Gracias por tu compra! Vuelve pronto';
       }
-      
+
       if (nuevoEstado === 'Cancelado') {
-        return '🍪 *ESME COOKIES*\n\n' +
+        return '*ESME COOKIES*\n\n' +
           '*PEDIDO CANCELADO*\n\n' +
           'Pedido #' + String(order.numero).padStart(4, '0') + '\n' +
           'Cliente: ' + (order.cliente || '') + '\n\n' +
           'Este pedido ha sido cancelado.\n\n' +
           'Si tienes alguna pregunta, respóndeme a este mensaje.';
       }
-      
-      return '🍪 *ESME COOKIES*\n\nPedido #' + String(order.numero).padStart(4, '0') + '\nCliente: ' + (order.cliente || '');
+
+      return '*ESME COOKIES*\n\nPedido #' + String(order.numero).padStart(4, '0') + '\nCliente: ' + (order.cliente || '');
     }
 
     async function sendConfirmation(numero) {
@@ -2686,7 +2812,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       if (!order || !order.telefono) { showToast('Sin telefono', 'error'); return; }
 
       var currentState = order.estado || 'Pendiente';
-      var nextState = getNextState(currentState);
+      var nextState = getNextState(currentState, !!order.comprobante_url);
 
       if (!nextState) {
         showToast('Este pedido ya esta completo', 'info');
@@ -2727,7 +2853,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       if (!order) { showToast('Pedido no encontrado', 'error'); return; }
 
       var currentState = order.estado || 'Pendiente';
-      var nextState = getNextState(currentState);
+      var nextState = getNextState(currentState, !!order.comprobante_url);
 
       if (!nextState) {
         showToast('Este pedido ya esta completo', 'info');
@@ -3648,13 +3774,15 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         // Ordenar por total gastado descendente
         clientes.sort(function(a, b) { return (b.total_gastado || 0) - (a.total_gastado || 0); });
 
-        var wb = XLSX.utils.book_new();
+        var workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Esme Cookies';
+        workbook.created = new Date();
 
         // --- Hoja Resumen ---
-        var wsData = [];
-        wsData.push([{ t: 's', v: 'ESME COOKIES - REPORTE DE CLIENTES' }]);
-        wsData.push([{ t: 's', v: 'Fecha de Generación: ' + new Date().toLocaleDateString('es-DO') }]);
-        wsData.push([]);
+        var hojaResumen = nuevaHoja(workbook, 'Resumen', [26, 20, 16, 12, 16]);
+        agregarTitulo(hojaResumen, 'ESME COOKIES - REPORTE DE CLIENTES', 5);
+        hojaResumen.addRow(['Fecha de Generación: ' + new Date().toLocaleDateString('es-DO')]);
+        hojaResumen.addRow([]);
 
         var totalClientes = clientes.length;
         var clientesConPedidos = clientes.filter(function(c) { return (c.total_pedidos || 0) > 0; }).length;
@@ -3662,62 +3790,58 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         var totalGastado = clientes.reduce(function(s, c) { return s + (c.total_gastado || 0); }, 0);
         var totalDescuentos = clientes.reduce(function(s, c) { return s + (c.total_descuentos || 0); }, 0);
         var promedioCliente = clientesConPedidos > 0 ? Math.round(totalGastado / clientesConPedidos) : 0;
-        var mejorCliente = clientes[0] || { nombre: '-', total_gastado: 0, total_pedidos: 0 };
 
-        wsData.push([{ t: 's', v: 'RESUMEN GENERAL' }]);
-        wsData.push(['Total Clientes:', totalClientes, '']);
-        wsData.push(['Clientes con Pedidos:', clientesConPedidos, '']);
-        wsData.push(['Clientes sin Pedidos:', clientesSinPedidos, '']);
-        wsData.push(['Total Recaudado:', totalGastado, 'RD$']);
-        wsData.push(['Total Descuentos:', totalDescuentos, 'RD$']);
-        wsData.push(['Promedio por Cliente:', promedioCliente, 'RD$']);
-        wsData.push([]);
+        agregarEncabezado(hojaResumen, ['RESUMEN GENERAL', '', '', '', '']);
+        hojaResumen.addRow(['Total Clientes:', totalClientes]);
+        hojaResumen.addRow(['Clientes con Pedidos:', clientesConPedidos]);
+        hojaResumen.addRow(['Clientes sin Pedidos:', clientesSinPedidos]);
+        celdaMoneda(hojaResumen.addRow(['Total Recaudado:']), 2, totalGastado);
+        celdaMoneda(hojaResumen.addRow(['Total Descuentos:']), 2, totalDescuentos);
+        celdaMoneda(hojaResumen.addRow(['Promedio por Cliente:']), 2, promedioCliente);
+        hojaResumen.addRow([]);
 
         // Por Sector
-        wsData.push([{ t: 's', v: 'POR SECTOR' }]);
-        wsData.push(['Sector', 'Clientes', '%']);
+        agregarEncabezado(hojaResumen, ['POR SECTOR', '', '', '', '']);
+        agregarEncabezado(hojaResumen, ['Sector', 'Clientes', '%', '', '']);
         var porSector = {};
         clientes.forEach(function(c) {
           var sector = c.sector || 'Sin sector';
           porSector[sector] = (porSector[sector] || 0) + 1;
         });
         for (var sector in porSector) {
-          wsData.push([sector, porSector[sector], Math.round(porSector[sector] / totalClientes * 100) + '%']);
+          hojaResumen.addRow([sector, porSector[sector], Math.round(porSector[sector] / totalClientes * 100) + '%']);
         }
-        wsData.push([]);
+        hojaResumen.addRow([]);
 
         // Top 10
-        wsData.push([{ t: 's', v: 'TOP 10 CLIENTES' }]);
-        wsData.push(['#', 'Cliente', 'Teléfono', 'Pedidos', 'Total Gastado', 'RD$']);
+        agregarEncabezado(hojaResumen, ['TOP 10 CLIENTES', '', '', '', '']);
+        agregarEncabezado(hojaResumen, ['#', 'Cliente', 'Teléfono', 'Pedidos', 'Total Gastado']);
         clientes.slice(0, 10).forEach(function(c, i) {
-          wsData.push([i + 1, c.nombre || '-', c.telefono || '-', c.total_pedidos || 0, c.total_gastado || 0, 'RD$']);
+          var fila = hojaResumen.addRow([i + 1, c.nombre || '-', c.telefono || '-', c.total_pedidos || 0]);
+          celdaMoneda(fila, 5, c.total_gastado);
         });
 
-        var wsResumen = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
-
         // --- Hoja Detalle ---
-        var detalleData = [];
-        detalleData.push(['Nombre', 'Teléfono', 'Email', 'Dirección', 'Sector', 'Total Pedidos', 'Total Gastado', 'Descuentos', 'Último Pedido']);
+        var hojaDetalle = nuevaHoja(workbook, 'Clientes', [22, 14, 26, 28, 16, 13, 15, 13, 14]);
+        agregarEncabezado(hojaDetalle, ['Nombre', 'Teléfono', 'Email', 'Dirección', 'Sector', 'Total Pedidos', 'Total Gastado', 'Descuentos', 'Último Pedido']);
 
         clientes.forEach(function(c) {
-          detalleData.push([
+          var fila = hojaDetalle.addRow([
             c.nombre || '',
             c.telefono || '',
             c.email || '',
             c.direccion || '',
             c.sector || '',
             c.total_pedidos || 0,
-            c.total_gastado || 0,
-            c.total_descuentos || 0,
+            null,
+            null,
             c.ultimo_pedido || ''
           ]);
+          celdaMoneda(fila, 7, c.total_gastado);
+          celdaMoneda(fila, 8, c.total_descuentos);
         });
 
-        var wsDetalle = XLSX.utils.aoa_to_sheet(detalleData);
-        XLSX.utils.book_append_sheet(wb, wsDetalle, 'Clientes');
-
-        XLSX.writeFile(wb, 'ESME_Reporte_Clientes_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
+        await descargarLibro(workbook, 'ESME_Reporte_Clientes_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
 
         showToast('Reporte de clientes exportado', 'success');
       } catch (err) {
@@ -3740,53 +3864,53 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           return;
         }
 
-        var wb = XLSX.utils.book_new();
+        var workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Esme Cookies';
+        workbook.created = new Date();
 
         // --- Hoja Resumen por Cliente ---
-        var wsData = [];
-        wsData.push([{ t: 's', v: 'ESME COOKIES - CLIENTES CON HISTORIAL' }]);
-        wsData.push([{ t: 's', v: 'Fecha de Generación: ' + new Date().toLocaleDateString('es-DO') }]);
-        wsData.push([]);
+        var hojaResumen = nuevaHoja(workbook, 'Resumen Clientes', [22, 14, 12, 16, 12, 12, 12, 14]);
+        agregarTitulo(hojaResumen, 'ESME COOKIES - CLIENTES CON HISTORIAL', 8);
+        hojaResumen.addRow(['Fecha de Generación: ' + new Date().toLocaleDateString('es-DO')]);
+        hojaResumen.addRow([]);
 
         var totalClientes = clientes.length;
         var totalGastado = clientes.reduce(function(s, c) { return s + (c.total_gastado || 0); }, 0);
         var totalPedidos = ordersAll.length;
         var totalDescuentos = clientes.reduce(function(s, c) { return s + (c.total_descuentos || 0); }, 0);
 
-        wsData.push([{ t: 's', v: 'RESUMEN GENERAL' }]);
-        wsData.push(['Total Clientes:', totalClientes, '']);
-        wsData.push(['Total Pedidos:', totalPedidos, '']);
-        wsData.push(['Total Recaudado:', totalGastado, 'RD$']);
-        wsData.push(['Total Descuentos:', totalDescuentos, 'RD$']);
-        wsData.push([]);
+        agregarEncabezado(hojaResumen, ['RESUMEN GENERAL', '', '', '', '', '', '', '']);
+        hojaResumen.addRow(['Total Clientes:', totalClientes]);
+        hojaResumen.addRow(['Total Pedidos:', totalPedidos]);
+        celdaMoneda(hojaResumen.addRow(['Total Recaudado:']), 2, totalGastado);
+        celdaMoneda(hojaResumen.addRow(['Total Descuentos:']), 2, totalDescuentos);
+        hojaResumen.addRow([]);
 
         // Resumen por cliente
-        wsData.push([{ t: 's', v: 'RESUMEN POR CLIENTE' }]);
-        wsData.push(['Cliente', 'Teléfono', 'Pedidos', 'Total Gastado', 'Pendientes', 'Entregados', 'Cancelados', 'Último Pedido']);
+        agregarEncabezado(hojaResumen, ['RESUMEN POR CLIENTE', '', '', '', '', '', '', '']);
+        agregarEncabezado(hojaResumen, ['Cliente', 'Teléfono', 'Pedidos', 'Total Gastado', 'Pendientes', 'Entregados', 'Cancelados', 'Último Pedido']);
 
         clientes.forEach(function(c) {
           var pedidosCliente = ordersAll.filter(function(o) { return o.telefono === c.telefono; });
           var pendientes = pedidosCliente.filter(function(o) { return o.estado === 'Pendiente' || o.estado === 'Esperando Pago' || o.estado === 'Confirmado' || o.estado === 'Preparando' || o.estado === 'Listo'; }).length;
           var entregados = pedidosCliente.filter(function(o) { return o.estado === 'Entregado'; }).length;
           var cancelados = pedidosCliente.filter(function(o) { return o.estado === 'Cancelado'; }).length;
-          wsData.push([
+          var fila = hojaResumen.addRow([
             c.nombre || '',
             c.telefono || '',
             pedidosCliente.length,
-            c.total_gastado || 0,
+            null,
             pendientes,
             entregados,
             cancelados,
             c.ultimo_pedido || ''
           ]);
+          celdaMoneda(fila, 4, c.total_gastado);
         });
 
-        var wsResumen = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen Clientes');
-
         // --- Hoja Detalle de Pedidos ---
-        var detalleData = [];
-        detalleData.push(['#', 'Fecha', 'Cliente', 'Teléfono', 'Tipo Entrega', 'Productos', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Pago', 'Estado', 'Promociones']);
+        var hojaDetalle = nuevaHoja(workbook, 'Detalle Pedidos', [9, 12, 22, 14, 16, 40, 13, 12, 10, 13, 14, 14, 14, 32, 30]);
+        agregarEncabezado(hojaDetalle, ['#', 'Fecha', 'Cliente', 'Teléfono', 'Tipo Entrega', 'Productos', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Pago', 'Estado', 'Entrega Deseada', 'Promociones', 'Comprobante']);
 
         ordersAll.sort(function(a, b) { return b.numero - a.numero; });
 
@@ -3801,27 +3925,31 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
           } catch(e) { promos = []; }
           var promosTexto = promos.map(function(p) { return p.titulo + ' (-RD$' + p.descuento + ')'; }).join('; ');
 
-          detalleData.push([
+          var fila = hojaDetalle.addRow([
             '#' + (o.numero || ''),
             o.fecha || '',
             clienteNombre,
             o.telefono || '',
             tipoTxt,
             productos,
-            o.subtotal || 0,
-            o.descuento || 0,
-            o.envio || 0,
-            o.total || 0,
+            null, null, null, null,
             o.pago || '',
             o.estado || '',
-            promosTexto
+            o.fecha_entrega || '',
+            promosTexto,
+            o.comprobante_url ? 'Ver comprobante' : ''
           ]);
+          if (o.comprobante_url) {
+            fila.getCell(15).value = { text: 'Ver comprobante', hyperlink: o.comprobante_url };
+            fila.getCell(15).font = { color: { argb: 'FF2C6FBB' }, underline: true };
+          }
+          celdaMoneda(fila, 7, o.subtotal);
+          celdaMoneda(fila, 8, o.descuento);
+          celdaMoneda(fila, 9, o.envio);
+          celdaMoneda(fila, 10, o.total);
         });
 
-        var wsDetalle = XLSX.utils.aoa_to_sheet(detalleData);
-        XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle Pedidos');
-
-        XLSX.writeFile(wb, 'ESME_Clientes_Historial_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
+        await descargarLibro(workbook, 'ESME_Clientes_Historial_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
 
         showToast('Reporte de clientes e historial exportado', 'success');
       } catch (err) {
@@ -3979,7 +4107,7 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
       showToast('Reporte mostrado', 'success');
     }
 
-    function exportOrdersToExcelExport() {
+    async function exportOrdersToExcelExport() {
       var search = (document.getElementById('search') || { value: '' }).value.toLowerCase();
       var status = (document.getElementById('filter-status') || { value: '' }).value;
       var entrega = (document.getElementById('filter-entrega') || { value: '' }).value;
@@ -4013,157 +4141,8 @@ Si tienes alguna pregunta, respóndeme a este mensaje.`
         return;
       }
 
-      // Agrupar pedidos por mes
-      var ordersByMonth = {};
-      filtered.forEach(function(o) {
-        var d = parseDate(o.fecha);
-        if (!d || isNaN(d.getTime())) return;
-        var mesKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        var mesNombre = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-        if (!ordersByMonth[mesKey]) {
-          ordersByMonth[mesKey] = { nombre: mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1), orders: [] };
-        }
-        ordersByMonth[mesKey].orders.push(o);
-      });
-
-      // Crear libro de Excel
-      var wb = XLSX.utils.book_new();
-
-      // Función para crear tabla de resumen
-      function crearResumenMensual(monthOrders, mesNombre) {
-        var wsData = [];
-
-        // Título
-        wsData.push([{ t: 's', v: 'ESME COOKIES - REPORTE DE VENTAS' }]);
-        wsData.push([{ t: 's', v: 'Mes: ' + mesNombre }]);
-        wsData.push([{ t: 's', v: 'Fecha de Generación: ' + new Date().toLocaleDateString('es-DO') }]);
-        wsData.push([]);
-
-        // Resumen Ejecutivo
-        wsData.push([{ t: 's', v: 'RESUMEN EJECUTIVO' }]);
-
-        var totalVentasNetas = monthOrders.reduce(function(s, o) { return s + (o.estado !== 'Cancelado' ? (o.total || 0) : 0); }, 0);
-        var totalDescuentos = monthOrders.reduce(function(s, o) { return s + (o.descuento || 0); }, 0);
-        var totalEnvios = monthOrders.reduce(function(s, o) { return s + (o.envio || 0); }, 0);
-        var totalSubtotal = monthOrders.reduce(function(s, o) { return s + (o.subtotal || 0); }, 0);
-        var pedidosActivos = monthOrders.filter(function(o) { return o.estado !== 'Cancelado'; }).length;
-        var ticketsPromedio = pedidosActivos > 0 ? Math.round(totalVentasNetas / pedidosActivos) : 0;
-
-        wsData.push(['Ventas Brutas:', totalSubtotal, 'RD$']);
-        wsData.push(['Total Descuentos:', totalDescuentos, 'RD$']);
-        wsData.push(['Total Envíos:', totalEnvios, 'RD$']);
-        wsData.push(['VENTAS NETAS:', totalVentasNetas, 'RD$']);
-        wsData.push(['Ticket Promedio:', ticketsPromedio, 'RD$']);
-        wsData.push(['Total Pedidos:', monthOrders.length, '']);
-        wsData.push([]);
-
-        // Por Estado
-        wsData.push([{ t: 's', v: 'POR ESTADO' }]);
-        wsData.push(['Estado', 'Cantidad', '%']);
-        wsData.push(['Pendientes', monthOrders.filter(function(o) { return o.estado === 'Pendiente'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Pendiente'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push(['Confirmados', monthOrders.filter(function(o) { return o.estado === 'Confirmado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Confirmado'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push(['Entregados', monthOrders.filter(function(o) { return o.estado === 'Entregado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Entregado'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push(['Cancelados', monthOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length, Math.round(monthOrders.filter(function(o) { return o.estado === 'Cancelado'; }).length / monthOrders.length * 100) + '%']);
-        wsData.push([]);
-
-        // Por Método de Pago
-        wsData.push([{ t: 's', v: 'POR MÉTODO DE PAGO' }]);
-        wsData.push(['Método', 'Total', 'RD$']);
-        var pagos = {};
-        monthOrders.forEach(function(o) {
-          if (o.estado !== 'Cancelado') {
-            var metodo = o.pago || 'No especificado';
-            pagos[metodo] = (pagos[metodo] || 0) + (o.total || 0);
-          }
-        });
-        for (var metodo in pagos) {
-          wsData.push([metodo, pagos[metodo], 'RD$']);
-        }
-        wsData.push([]);
-
-        // Por Tipo de Entrega
-        wsData.push([{ t: 's', v: 'POR TIPO DE ENTREGA' }]);
-        wsData.push(['Tipo', 'Pedidos']);
-        var entregas = {};
-        monthOrders.forEach(function(o) {
-          if (o.estado !== 'Cancelado') {
-            var tipo = o.tipo_entrega === 'pickup' ? 'Pasar a buscar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envío Nacional' : 'No especificado';
-            entregas[tipo] = (entregas[tipo] || 0) + 1;
-          }
-        });
-        for (var tipo in entregas) {
-          wsData.push([tipo, entregas[tipo]]);
-        }
-
-        return wsData;
-      }
-
-      // Función para crear detalle de pedidos
-      function crearDetallePedidos(monthOrders) {
-        var wsData = [];
-
-        // Encabezados
-        wsData.push(['#', 'Fecha', 'Cliente', 'Teléfono', 'Tipo Entrega', 'Productos', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Pago', 'Estado', 'Promociones']);
-
-        monthOrders.forEach(function(o) {
-          var promos = [];
-          try {
-            if (o.promociones_aplicadas) {
-              promos = JSON.parse(o.promociones_aplicadas);
-            }
-          } catch(e) { promos = []; }
-          var promosTexto = promos.map(function(p) { return p.titulo + ' (-RD$' + p.descuento + ')'; }).join('; ');
-
-          var productos = (o.productos || '').replace(/\n/g, ', ');
-          var tipoTxt = o.tipo_entrega === 'pickup' ? 'Pasar a buscar' : o.tipo_entrega === 'delivery' ? 'Delivery' : o.tipo_entrega === 'envio' ? 'Envío Nacional' : '';
-
-          wsData.push([
-            '#' + (o.numero || ''),
-            o.fecha || '',
-            o.cliente || '',
-            o.telefono || '',
-            tipoTxt,
-            productos,
-            o.subtotal || 0,
-            o.descuento || 0,
-            o.envio || 0,
-            o.total || 0,
-            o.pago || '',
-            o.estado || '',
-            promosTexto
-          ]);
-        });
-
-        return wsData;
-      }
-
-      // Crear hojas por mes
-      for (var mesKey in ordersByMonth) {
-        var mesData = ordersByMonth[mesKey];
-        var mesNombre = mesData.nombre;
-        var monthOrders = mesData.orders;
-
-        // Hoja de Resumen
-        var wsResumen = XLSX.utils.aoa_to_sheet(crearResumenMensual(monthOrders, mesNombre));
-        XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen ' + mesNombre.substring(0, 3));
-
-        // Hoja de Detalle
-        var wsDetalle = XLSX.utils.aoa_to_sheet(crearDetallePedidos(monthOrders));
-        XLSX.utils.book_append_sheet(wb, wsDetalle, 'Pedidos ' + mesNombre.substring(0, 3));
-      }
-
-      // Hoja General (si hay más de un mes)
-      if (Object.keys(ordersByMonth).length > 1) {
-        var wsGeneral = XLSX.utils.aoa_to_sheet(crearResumenMensual(filtered, 'Todos'));
-        XLSX.utils.book_append_sheet(wb, wsGeneral, 'General');
-
-        var wsDetalleGeneral = XLSX.utils.aoa_to_sheet(crearDetallePedidos(filtered));
-        XLSX.utils.book_append_sheet(wb, wsDetalleGeneral, 'Todos los Pedidos');
-      }
-
-      // Descargar
-      XLSX.writeFile(wb, 'ESME_Reporte_Pedidos_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
-
+      var workbook = construirLibroReporteVentas(filtered);
+      await descargarLibro(workbook, 'ESME_Reporte_Pedidos_' + (new Date().toISOString().split('T')[0]) + '.xlsx');
       showToast('Reporte exportado exitosamente', 'success');
     }
 

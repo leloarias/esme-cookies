@@ -12,7 +12,11 @@ const { initDatabase, prepare } = require('../src/db');
 
 async function main() {
   const username = process.argv[2] || process.env.ADMIN_USER || 'admin';
-  const password = process.argv[3] || process.env.ADMIN_PASS || 'admin123';
+  let password = process.argv[3] || process.env.ADMIN_PASS;
+  const wasGenerated = !password;
+  if (wasGenerated) {
+    password = require('crypto').randomBytes(9).toString('base64url');
+  }
 
   await initDatabase();
   const hash = bcrypt.hashSync(password, 10);
@@ -24,6 +28,9 @@ async function main() {
   } else {
     await prepare('INSERT INTO administradores (username, password_hash) VALUES (?, ?)').run(username, hash);
     console.log(`✅ Administrador "${username}" creado.`);
+  }
+  if (wasGenerated) {
+    console.log(`🔑 Contraseña generada (guárdala ya, no se vuelve a mostrar): ${password}`);
   }
   process.exit(0);
 }

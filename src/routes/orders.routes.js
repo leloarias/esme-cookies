@@ -5,10 +5,11 @@ const { sendNewOrderEmail, sendCustomerConfirmationEmail, sendStatusChangeEmail 
 const { normalizePhone, sanitizeString, getDominicanDateTime } = require('../utils/helpers');
 const { filtrarPromocionesVigentes, evaluarPromociones } = require('../services/promotions');
 const { saveClientFromOrder, ensureClientExists } = require('../services/clients');
-const { checkStock, decrementStock, restoreStockForOrder } = require('../services/inventory');
-const { consumeForOrder: consumeIngredientsForOrder, restoreForOrder: restoreIngredientsForOrder, checkIngredientStock } = require('../services/ingredients');
+const { checkStock, decrementStock, restoreStockForOrder, reserveStockForOrder } = require('../services/inventory');
+const { consumeForOrder: consumeIngredientsForOrder, restoreForOrder: restoreIngredientsForOrder, reserveForOrder: reserveIngredientsForOrder, checkIngredientStock } = require('../services/ingredients');
 const { nextOrderNumber } = require('../services/orderNumber');
 const { getIO } = require('../services/realtime');
+const cloudinary = require('../config/cloudinary');
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.get('/api/orders', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/api/orders/cliente/:telefono', async (req, res) => {
+router.get('/api/orders/cliente/:telefono', verifyToken, async (req, res) => {
   try {
     const telefono = req.params.telefono;
     const orders = await prepare('SELECT * FROM pedidos WHERE telefono = ?').all(telefono);
@@ -68,7 +69,7 @@ router.get('/api/orders/:num', verifyToken, async (req, res) => {
 const METODOS_PAGO_VALIDOS = ['Transferencia', 'Efectivo'];
 
 router.post('/api/orders', async (req, res) => {
-  let { cliente, telefono, email, productos, pago, tipo_entrega, observaciones, direccion, sector, nota } = req.body;
+  let { cliente, telefono, email, productos, pago, tipo_entrega, observaciones, direccion, sector, nota, fecha_entrega } = req.body;
 
   cliente = sanitizeString(cliente);
   telefono = sanitizeString(telefono);
@@ -87,12 +88,31 @@ router.post('/api/orders', async (req, res) => {
     return res.status(400).json({ error: 'Nombre de cliente inválido' });
   }
 
+  // Fecha de entrega deseada (opcional): formato YYYY-MM-DD desde el
+  // <input type="date">. Se valida el formato y que no sea una fecha ya
+  // pasada, pero no es obligatoria — muchos pedidos son "cuando puedan".
+  if (fecha_entrega) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha_entrega)) {
+      return res.status(400).json({ error: 'Fecha de entrega inválida' });
+    }
+    const hoy = getDominicanDateTime().date;
+    if (fecha_entrega < hoy) {
+      return res.status(400).json({ error: 'La fecha de entrega no puede ser en el pasado' });
+    }
+  } else {
+    fecha_entrega = null;
+  }
+
   const telefonoDigits = telefono.replace(/\D/g, '');
   if (telefonoDigits.length < 10 || telefonoDigits.length > 15) {
     return res.status(400).json({ error: 'Número de teléfono inválido' });
   }
 
-  const existingCliente = await prepare('SELECT id, nombre, activo FROM clientes WHERE telefono = ?').get(telefono);
+  // Comparar por teléfono normalizado: clientes.telefono siempre se guarda
+  // a 10 dígitos (normalizePhone), así que comparar contra el texto tal cual
+  // lo escribió la persona dejaba evadir el bloqueo con solo cambiar el
+  // formato (espacios, guiones, código de país).
+  const existingCliente = await prepare('SELECT id, nombre, activo FROM clientes WHERE telefono = ?').get(normalizePhone(telefono));
   if (existingCliente && existingCliente.activo == 0) {
     return res.status(403).json({ error: 'Tu cuenta está inactiva. Por favor contacta al administrador.' });
   }
@@ -142,6 +162,30 @@ router.post('/api/orders', async (req, res) => {
   }
   const totalItems = cartItemsArr.reduce((a, item) => a + item.qty, 0);
 
+  // Validación real de "armá tu caja": no alcanza con que el carrito tenga
+  // el producto placeholder (id 7) — el tamaño elegido y los productos deben
+  // coincidir con lo que permite productos.box_config. Antes solo se
+  // chequeaba la presencia del id 7, así que un pedido armado directo a la
+  // API (sin pasar por el armador) podía activar promos "solo cajas" con un
+  // pedido mínimo de un producto.
+  const boxItem = cartItemsArr.find(item => Number(item.id) === 7);
+  let hasBox = false;
+  if (boxItem) {
+    const boxProd = await prepare('SELECT box_config FROM productos WHERE id = 7').get();
+    let boxConfig = { sizes: [6, 12, 24], allowedProducts: [] };
+    try {
+      const parsed = JSON.parse((boxProd && boxProd.box_config) || '{}');
+      if (parsed && typeof parsed === 'object') boxConfig = { ...boxConfig, ...parsed };
+    } catch (e) { /* usa el default */ }
+
+    const contenidoCaja = cartItemsArr.filter(item => Number(item.id) !== 7);
+    const cantidadCaja = contenidoCaja.reduce((s, item) => s + item.qty, 0);
+    const tamanoValido = Array.isArray(boxConfig.sizes) && boxConfig.sizes.includes(cantidadCaja);
+    const productosValidos = !Array.isArray(boxConfig.allowedProducts) || boxConfig.allowedProducts.length === 0 ||
+      contenidoCaja.every(item => boxConfig.allowedProducts.includes(item.id));
+    hasBox = tamanoValido && productosValidos;
+  }
+
   // El precio de envío también se resuelve en el servidor: nunca se confía en
   // un precio que mande el navegador.
   //
@@ -184,7 +228,7 @@ router.post('/api/orders', async (req, res) => {
   }
 
   const { descuentoTotal, envioDescuento, promosAplicadas } = evaluarPromociones(promosActivas, {
-    subTotalNum, tipoEntrega, totalItems, envio, cartItemsArr, clientePedidos
+    subTotalNum, tipoEntrega, totalItems, envio, cartItemsArr, clientePedidos, hasBox
   });
 
   const descuentoFinal = Math.min(descuentoTotal, subTotalNum);
@@ -197,18 +241,41 @@ router.post('/api/orders', async (req, res) => {
   try {
     const newNum = await nextOrderNumber();
 
+    // Reservar stock e ingredientes de forma atómica ANTES de crear el
+    // pedido: si dos pedidos casi simultáneos compiten por la misma unidad,
+    // el que pierde la carrera se rechaza acá en vez de aceptarse y quedar
+    // sin poder prepararse (ver decrementStock/consumeForOrder, que hacen el
+    // descuento con una sola sentencia UPDATE...WHERE stock >= cantidad).
+    const stockResult = await decrementStock(cartItemsArr, newNum);
+    if (!stockResult.ok) {
+      return res.status(409).json({ error: stockResult.error });
+    }
+    const ingredientResult = await consumeIngredientsForOrder(cartItemsArr, newNum);
+    if (!ingredientResult.ok) {
+      await restoreStockForOrder(newNum, 'Reserva revertida: no había ingredientes suficientes');
+      return res.status(409).json({ error: ingredientResult.error });
+    }
+
     const totalConDescuento = Math.max(0, subTotalNum - descuentoFinal + envio - envioDescuento);
 
-    await prepare(`
-      INSERT INTO pedidos (
-        numero, fecha, cliente, telefono, productos, cantidad, precio, subtotal, descuento, descuento_detalles, envio, total,
-        pago, estado, observaciones, tipo_entrega, estado_timestamps, direccion, sector, nota, promociones_aplicadas
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      newNum, fechaStr, cliente, telefono, productos, totalItems, subTotalNum,
-      subTotalNum, descuentoFinal + envioDescuento, descuentoDetalles, envio, totalConDescuento, pagoValidado,
-      fullObservaciones, tipo_entrega || 'pickup', estadoTimestamps, direccion || '', sector || '', nota || '', promosJson
-    );
+    try {
+      await prepare(`
+        INSERT INTO pedidos (
+          numero, fecha, cliente, telefono, productos, cantidad, precio, subtotal, descuento, descuento_detalles, envio, total,
+          pago, estado, observaciones, tipo_entrega, estado_timestamps, direccion, sector, nota, promociones_aplicadas, fecha_entrega
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        newNum, fechaStr, cliente, telefono, productos, totalItems, subTotalNum,
+        subTotalNum, descuentoFinal + envioDescuento, descuentoDetalles, envio, totalConDescuento, pagoValidado,
+        fullObservaciones, tipo_entrega || 'pickup', estadoTimestamps, direccion || '', sector || '', nota || '', promosJson, fecha_entrega
+      );
+    } catch (insertErr) {
+      // El pedido no se pudo guardar: revertir la reserva para no dejar
+      // stock/ingredientes descontados sin un pedido real detrás.
+      await restoreStockForOrder(newNum, 'Reserva revertida: error al guardar el pedido');
+      await restoreIngredientsForOrder(newNum);
+      throw insertErr;
+    }
 
     const orderData = {
       numero: newNum,
@@ -222,9 +289,12 @@ router.post('/api/orders', async (req, res) => {
       envio: envio - envioDescuento,
       total: totalConDescuento,
       tipo_entrega,
-      observaciones: fullObservaciones
+      observaciones: fullObservaciones,
+      fecha_entrega: fecha_entrega
     };
-    getIO().emit('nuevo_pedido', orderData);
+    // Solo a admins autenticados: incluye nombre, teléfono y dirección del
+    // cliente, así que nunca debe llegar al socket público de la tienda.
+    getIO().to('admins').emit('nuevo_pedido', orderData);
     sendNewOrderEmail(orderData);
     await saveClientFromOrder(cliente, telefono, email, direccion || '', sector || '', totalConDescuento, descuentoFinal + envioDescuento);
     // Email de confirmación al cliente (si dejó su email y hay SMTP configurado; si no, se omite solo).
@@ -233,11 +303,6 @@ router.post('/api/orders', async (req, res) => {
     for (const p of promosAplicadas) {
       await prepare("UPDATE promociones SET usos_actuales = usos_actuales + 1 WHERE id = ?").run(p.id);
     }
-
-    // Descontar inventario de los productos con control de stock, y los
-    // ingredientes que corresponden según la receta de cada uno.
-    await decrementStock(cartItemsArr, newNum);
-    await consumeIngredientsForOrder(cartItemsArr, newNum);
 
     res.json({
       success: true,
@@ -261,9 +326,52 @@ router.post('/api/orders', async (req, res) => {
   }
 });
 
+// Subir comprobante de pago (captura/foto de la transferencia). Pública
+// como la creación del pedido, pero exige el mismo teléfono del pedido
+// como comprobación mínima de que quien sube la imagen es quien lo hizo —
+// mismo criterio de "tolerancia" que /api/seguimiento (compara normalizado).
+router.post('/api/orders/:num/comprobante', async (req, res) => {
+  const num = req.params.num;
+  const { telefono, imagen } = req.body;
+
+  if (!telefono || !imagen) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+
+  try {
+    const order = await prepare('SELECT numero, telefono, cliente FROM pedidos WHERE numero = ?').get(num);
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    if (normalizePhone(telefono) !== normalizePhone(order.telefono)) {
+      return res.status(403).json({ error: 'El teléfono no coincide con el del pedido' });
+    }
+
+    const result = await cloudinary.uploader.upload(imagen, {
+      folder: 'esme-cookies/comprobantes',
+      public_id: `comprobante_${num}_${Date.now()}`,
+      overwrite: true,
+      resource_type: 'image'
+    });
+
+    await prepare('UPDATE pedidos SET comprobante_url = ? WHERE numero = ?').run(result.secure_url, num);
+
+    // Aviso en vivo a admins conectados: así el equipo sabe que ya puede
+    // verificar el pago sin tener que revisar cada pedido manualmente.
+    getIO().to('admins').emit('comprobante_subido', { numero: order.numero, cliente: order.cliente });
+
+    res.json({ success: true, url: result.secure_url });
+  } catch (err) {
+    // El detalle técnico (ej. Cloudinary sin configurar) queda en el log del
+    // servidor — al cliente no le sirve de nada ver "cloud_name is disabled".
+    console.error('Error subiendo comprobante:', err.message);
+    res.status(500).json({ error: 'No se pudo subir el comprobante. Intenta de nuevo en unos minutos o envíalo por WhatsApp.' });
+  }
+});
+
 router.put('/api/orders/:num', verifyToken, async (req, res) => {
   const num = req.params.num;
-  const { cliente, telefono, productos, cantidad, precio, subtotal, envio, total, pago, estado, observaciones, tipo_entrega, estado_timestamp, estado_anterior } = req.body;
+  const { cliente, telefono, productos, cantidad, precio, subtotal, envio, total, pago, estado, observaciones, tipo_entrega, estado_timestamp, estado_anterior, fecha_entrega } = req.body;
 
   console.log('[PUT Order] Updating order:', num, 'New state:', estado, 'Previous:', estado_anterior);
 
@@ -272,6 +380,24 @@ router.put('/api/orders/:num', verifyToken, async (req, res) => {
     if (!existing) {
       console.log('[PUT Order] Order not found:', num);
       return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    // Si se reactiva un pedido cancelado, hay que volver a reservar el stock
+    // e ingredientes que se habían devuelto al cancelarlo — si no, el pedido
+    // queda "activo" pero esas unidades siguen figurando como disponibles,
+    // con riesgo de venderlas dos veces. Se valida ANTES del UPDATE principal
+    // para poder rechazar la reactivación (409) sin dejar el pedido a medias
+    // si ya no hay stock suficiente.
+    if (estado && existing.estado === 'Cancelado' && estado !== 'Cancelado') {
+      const stockResult = await reserveStockForOrder(num);
+      if (!stockResult.ok) {
+        return res.status(409).json({ error: stockResult.error });
+      }
+      const ingredientResult = await reserveIngredientsForOrder(num);
+      if (!ingredientResult.ok) {
+        await restoreStockForOrder(num, 'Reserva revertida: no había ingredientes suficientes para reactivar');
+        return res.status(409).json({ error: ingredientResult.error });
+      }
     }
 
     let timestamps = {};
@@ -303,6 +429,7 @@ router.put('/api/orders/:num', verifyToken, async (req, res) => {
     if (estado !== undefined) { updateFields.push('estado = ?'); updateValues.push(estado); }
     if (observaciones !== undefined) { updateFields.push('observaciones = ?'); updateValues.push(observaciones); }
     if (tipo_entrega !== undefined) { updateFields.push('tipo_entrega = ?'); updateValues.push(tipo_entrega); }
+    if (fecha_entrega !== undefined) { updateFields.push('fecha_entrega = ?'); updateValues.push(fecha_entrega); }
 
     updateFields.push('estado_timestamps = ?');
     updateValues.push(JSON.stringify(timestamps));

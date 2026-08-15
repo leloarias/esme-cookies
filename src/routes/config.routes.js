@@ -2,6 +2,7 @@ const express = require('express');
 const { prepare } = require('../db');
 const { verifyToken } = require('../middleware/auth');
 const { getIO } = require('../services/realtime');
+const { encrypt } = require('../utils/crypto');
 
 const router = express.Router();
 
@@ -59,7 +60,9 @@ router.post('/api/config', verifyToken, async (req, res) => {
       await prepare('UPDATE config SET emailUser=? WHERE id=1').run(body.emailUser);
     }
     if (body.emailPass) {
-      await prepare('UPDATE config SET emailPass=? WHERE id=1').run(body.emailPass);
+      // Se cifra antes de guardar: la contraseña de la app de Gmail no debe
+      // quedar en texto plano en la base de datos.
+      await prepare('UPDATE config SET emailPass=? WHERE id=1').run(encrypt(body.emailPass));
     }
     if (body.adminEmail !== undefined) {
       await prepare('UPDATE config SET adminEmail=? WHERE id=1').run(body.adminEmail);

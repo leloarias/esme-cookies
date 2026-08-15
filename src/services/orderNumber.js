@@ -1,44 +1,23 @@
-// Generación de números de pedido. Mantiene un contador en memoria que se
-// inicializa al arrancar (con el MAX(numero) de la base) y garantiza que
-// cada nuevo pedido tenga un número único, con prefijo de fecha AAAAMMDD.
+// Generación de números de pedido, con prefijo de fecha AAAAMMDD.
+// El contador vive en la fila única de `config` (lastOrderNumber), y cada
+// número se reserva con una sola sentencia UPDATE...RETURNING: SQLite/libSQL
+// serializa las escrituras, así que dos pedidos simultáneos nunca pueden
+// calcular el mismo número (antes había una ventana de carrera entre leer
+// un contador en memoria y confirmarlo con una consulta SELECT aparte).
 const { prepare } = require('../db');
 
-let orderCounter = 0;
-
-function setOrderCounter(n) {
-  orderCounter = n || 0;
-}
-
-function getOrderCounter() {
-  return orderCounter;
-}
-
-// Reserva y devuelve el próximo número de pedido libre.
 async function nextOrderNumber() {
   const today = new Date();
   const datePrefix = String(today.getFullYear()) + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
-
-  let newNum = orderCounter + 1;
   const minToday = parseInt(datePrefix + '000');
 
-  if (newNum < minToday) {
-    newNum = minToday;
-  }
+  const result = await prepare(
+    'UPDATE config SET lastOrderNumber = MAX(lastOrderNumber, ?) + 1 WHERE id = 1 RETURNING lastOrderNumber'
+  ).get(minToday - 1);
 
-  let existing = await prepare('SELECT numero FROM pedidos WHERE numero = ?').get(newNum);
-  while (existing) {
-    newNum++;
-    existing = await prepare('SELECT numero FROM pedidos WHERE numero = ?').get(newNum);
-  }
-
-  orderCounter = newNum;
-  // Persistido en config: si el pedido más alto se borra permanentemente y el
-  // servidor reinicia, MAX(numero) por sí solo "retrocedería" y reemitiría un
-  // número ya usado, lo que rompe la devolución de stock/ingredientes (el
-  // sistema los cree del pedido viejo, ya devuelto, y no repite la devolución).
-  await prepare('UPDATE config SET lastOrderNumber = ? WHERE id = 1').run(newNum);
+  const newNum = Number(result.lastOrderNumber);
   console.log('New order number:', newNum);
   return newNum;
 }
 
-module.exports = { setOrderCounter, getOrderCounter, nextOrderNumber };
+module.exports = { nextOrderNumber };
