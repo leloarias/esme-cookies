@@ -6,5 +6,6 @@ node_modules/
 esme_cookies.db
 public/uploads/
 *.log
+logs/
 .DS_Store
 .claude/settings.local.json
