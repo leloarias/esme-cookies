@@ -211,6 +211,7 @@ async function initDatabase() {
   ensureColumn('ingredientes', 'tamano_paquete', 'REAL DEFAULT 0');
   ensureColumn('pedidos', 'comprobante_url', 'TEXT');
   ensureColumn('pedidos', 'fecha_entrega', 'TEXT');
+  ensureColumn('productos', 'activo', 'INTEGER DEFAULT 1');
 
   // Inicializar config si está vacía
   const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get();

@@ -24,6 +24,7 @@ router.get('/api/products', async (req, res) => {
     }
     res.json(products);
   } catch (err) {
+    console.error('Error obteniendo productos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 });
