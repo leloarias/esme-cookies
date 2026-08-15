@@ -15,13 +15,16 @@ function getKey() {
   return crypto.createHash('sha256').update(secret).digest();
 }
 
+// CBC en vez de GCM a propósito: GCM usa la instrucción de CPU PCLMULQDQ
+// (disponible recién desde ~2010) y provoca "Illegal instruction" en
+// hardware viejo (confirmado en un Core 2 Duo de 2007). CBC no la necesita
+// y corre en cualquier CPU x86.
 function encrypt(text) {
   if (text === null || text === undefined || text === '') return text;
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv);
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', getKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(String(text), 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return PREFIX + Buffer.concat([iv, authTag, ciphertext]).toString('base64');
+  return PREFIX + Buffer.concat([iv, ciphertext]).toString('base64');
 }
 
 // Si el valor no tiene el prefijo, es un dato viejo guardado antes de este
@@ -31,11 +34,9 @@ function decrypt(value) {
   if (!value || typeof value !== 'string' || !value.startsWith(PREFIX)) return value;
   try {
     const raw = Buffer.from(value.slice(PREFIX.length), 'base64');
-    const iv = raw.subarray(0, 12);
-    const authTag = raw.subarray(12, 28);
-    const ciphertext = raw.subarray(28);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), iv);
-    decipher.setAuthTag(authTag);
+    const iv = raw.subarray(0, 16);
+    const ciphertext = raw.subarray(16);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', getKey(), iv);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
   } catch (e) {
     return value;
