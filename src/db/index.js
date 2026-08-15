@@ -1,31 +1,30 @@
-const { createClient } = require('@libsql/client');
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
 
 let db = null;
 
 async function initDatabase() {
-  // Base de datos independiente: por defecto un archivo local (libsql/SQLite).
-  // Opcionalmente puede apuntar a una base remota definiendo DATABASE_URL
-  // (o TURSO_DATABASE_URL, por compatibilidad).
-  const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || 'file:data/esme.db';
-  const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '';
-
-  // Si la base es un archivo local dentro de una subcarpeta, asegurar que exista.
-  if (url.startsWith('file:')) {
-    const path = require('path');
-    const fs = require('fs');
-    const dir = path.dirname(url.slice('file:'.length));
-    if (dir && dir !== '.' && !fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+  // Base de datos local únicamente (SQLite vía better-sqlite3). Se eligió
+  // sobre @libsql/client porque su binario nativo (compilado en Rust) crashea
+  // con "Illegal instruction" al escribir en CPUs viejas sin AVX/SSE4.2
+  // (confirmado en el servidor de producción, un Core 2 Duo de 2007).
+  // better-sqlite3 usa la librería C de SQLite, mucho más portable.
+  const url = process.env.DATABASE_URL || 'file:data/esme.db';
+  if (!url.startsWith('file:')) {
+    throw new Error('DATABASE_URL debe ser un archivo local ("file:ruta"). Las conexiones remotas (Turso) ya no son compatibles con este servidor.');
+  }
+  const filePath = url.slice('file:'.length);
+  const dir = path.dirname(filePath);
+  if (dir && dir !== '.' && !fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 
-  db = createClient({
-    url,
-    authToken
-  });
+  db = new Database(filePath);
+  db.pragma('journal_mode = WAL');
 
   // Crear tablas
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS config (
       id INTEGER PRIMARY KEY DEFAULT 1,
       pickupAddress TEXT,
@@ -56,7 +55,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS productos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nombre TEXT NOT NULL,
@@ -67,7 +66,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS pedidos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       numero INTEGER UNIQUE,
@@ -95,7 +94,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS administradores (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -103,7 +102,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS promociones (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       titulo TEXT NOT NULL,
@@ -133,7 +132,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS clientes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nombre TEXT NOT NULL,
@@ -151,7 +150,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS movimientos_stock (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       producto_id INTEGER NOT NULL,
@@ -167,7 +166,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS ingredientes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nombre TEXT NOT NULL,
@@ -180,7 +179,7 @@ async function initDatabase() {
     )
   `);
 
-  await db.execute(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS movimientos_ingredientes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ingrediente_id INTEGER NOT NULL,
@@ -198,74 +197,58 @@ async function initDatabase() {
   `);
 
   // Migraciones para bases de datos ya existentes (columnas agregadas después).
-  await ensureColumn('productos', 'stock', 'INTEGER');
-  await ensureColumn('config', 'lowStockThreshold', 'INTEGER DEFAULT 5');
-  await ensureColumn('config', 'inventoryAlertsEnabled', 'INTEGER DEFAULT 1');
-  await ensureColumn('config', 'customBoxConfig', 'TEXT');
-  await ensureColumn('productos', 'tipo', "TEXT DEFAULT 'producto'");
-  await ensureColumn('productos', 'box_config', 'TEXT');
-  await ensureColumn('config', 'envioZones', "TEXT DEFAULT '[]'");
-  await ensureColumn('config', 'categoryImages', "TEXT DEFAULT '[]'");
-  await ensureColumn('productos', 'categoria', "TEXT DEFAULT 'Galletas'");
-  await ensureColumn('productos', 'receta', "TEXT DEFAULT '[]'");
-  await ensureColumn('ingredientes', 'alerta_enviada', 'INTEGER DEFAULT 0');
-  await ensureColumn('ingredientes', 'tamano_paquete', 'REAL DEFAULT 0');
-  await ensureColumn('pedidos', 'comprobante_url', 'TEXT');
-  await ensureColumn('pedidos', 'fecha_entrega', 'TEXT');
+  ensureColumn('productos', 'stock', 'INTEGER');
+  ensureColumn('config', 'lowStockThreshold', 'INTEGER DEFAULT 5');
+  ensureColumn('config', 'inventoryAlertsEnabled', 'INTEGER DEFAULT 1');
+  ensureColumn('config', 'customBoxConfig', 'TEXT');
+  ensureColumn('productos', 'tipo', "TEXT DEFAULT 'producto'");
+  ensureColumn('productos', 'box_config', 'TEXT');
+  ensureColumn('config', 'envioZones', "TEXT DEFAULT '[]'");
+  ensureColumn('config', 'categoryImages', "TEXT DEFAULT '[]'");
+  ensureColumn('productos', 'categoria', "TEXT DEFAULT 'Galletas'");
+  ensureColumn('productos', 'receta', "TEXT DEFAULT '[]'");
+  ensureColumn('ingredientes', 'alerta_enviada', 'INTEGER DEFAULT 0');
+  ensureColumn('ingredientes', 'tamano_paquete', 'REAL DEFAULT 0');
+  ensureColumn('pedidos', 'comprobante_url', 'TEXT');
+  ensureColumn('pedidos', 'fecha_entrega', 'TEXT');
 
   // Inicializar config si está vacía
-  const configCount = await db.execute('SELECT COUNT(*) as count FROM config');
-  if (Number(configCount.rows[0].count) === 0) {
-    await db.execute({
-      sql: 'INSERT INTO config (id, pickupAddress, deliveryPrice, envioPrice) VALUES (1, ?, ?, ?)',
-      args: ['Calle Principal #1, San Juan', 50, 100]
-    });
+  const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get();
+  if (Number(configCount.count) === 0) {
+    db.prepare('INSERT INTO config (id, pickupAddress, deliveryPrice, envioPrice) VALUES (1, ?, ?, ?)')
+      .run('Calle Principal #1, San Juan', 50, 100);
   }
 
   // Migración: cifrar emailPass si quedó guardado en texto plano de antes de
   // este cambio (ver src/utils/crypto.js). Sin esto, la contraseña de la app
   // de Gmail queda legible por cualquiera que abra el archivo de la base de datos.
   const { encrypt } = require('../utils/crypto');
-  console.log('[DIAG] antes de SELECT emailPass');
-  const currentConfig = await db.execute('SELECT emailPass FROM config WHERE id = 1');
-  console.log('[DIAG] despues de SELECT emailPass, valor presente:', !!(currentConfig.rows[0] && currentConfig.rows[0].emailPass));
-  const currentEmailPass = currentConfig.rows[0] && currentConfig.rows[0].emailPass;
+  const currentConfig = db.prepare('SELECT emailPass FROM config WHERE id = 1').get();
+  const currentEmailPass = currentConfig && currentConfig.emailPass;
   if (currentEmailPass && !String(currentEmailPass).startsWith('enc1:')) {
-    console.log('[DIAG] antes de encrypt()');
-    const encrypted = encrypt(currentEmailPass);
-    console.log('[DIAG] despues de encrypt(), largo:', encrypted.length);
-    await db.execute({
-      sql: 'UPDATE config SET emailPass = ? WHERE id = 1',
-      args: [encrypted]
-    });
+    db.prepare('UPDATE config SET emailPass = ? WHERE id = 1').run(encrypt(currentEmailPass));
     console.log('[DB] Migración: emailPass cifrado en reposo');
   }
-  console.log('[DIAG] bloque emailPass terminado');
 
   // Asegurar que exista el producto "Caja Personalizada"
-  const boxExists = await db.execute("SELECT COUNT(*) as c FROM productos WHERE id = 7");
-  if (Number(boxExists.rows[0].c) === 0) {
-    await db.execute({
-      sql: "INSERT INTO productos (id, nombre, precio, descripcion, stock, tipo, box_config) VALUES (7, ?, ?, ?, NULL, 'caja', ?)",
-      args: ['Caja Personalizada', 0, 'Selecciona tus galletas favoritas', JSON.stringify({ sizes: [6, 12, 24], allowedProducts: [] })]
-    });
+  const boxExists = db.prepare('SELECT COUNT(*) as c FROM productos WHERE id = 7').get();
+  if (Number(boxExists.c) === 0) {
+    db.prepare("INSERT INTO productos (id, nombre, precio, descripcion, stock, tipo, box_config) VALUES (7, ?, ?, ?, NULL, 'caja', ?)")
+      .run('Caja Personalizada', 0, 'Selecciona tus galletas favoritas', JSON.stringify({ sizes: [6, 12, 24], allowedProducts: [] }));
     console.log('[DB] Producto "Caja Personalizada" creado');
   }
-  console.log('[DIAG] caja personalizada ok');
 
   // Migraciones
-  await ensureColumn('promociones', 'solo_cajas', 'INTEGER DEFAULT 0');
+  ensureColumn('promociones', 'solo_cajas', 'INTEGER DEFAULT 0');
   // Promos para clientes leales (con N o más pedidos previos)
-  await ensureColumn('promociones', 'solo_clientes_leales', 'INTEGER DEFAULT 0');
-  await ensureColumn('promociones', 'min_pedidos_leal', 'INTEGER DEFAULT 3');
-  console.log('[DIAG] promo ensureColumn ok');
+  ensureColumn('promociones', 'solo_clientes_leales', 'INTEGER DEFAULT 0');
+  ensureColumn('promociones', 'min_pedidos_leal', 'INTEGER DEFAULT 3');
 
   // Inicializar admin por defecto si no existe. Sin contraseña hardcodeada:
   // si no se definió ADMIN_PASS en el .env, se genera una al azar y se
   // imprime una única vez (no se puede volver a mostrar después).
-  const adminCount = await db.execute('SELECT COUNT(*) as count FROM administradores');
-  console.log('[DIAG] adminCount:', adminCount.rows[0].count);
-  if (Number(adminCount.rows[0].count) === 0) {
+  const adminCount = db.prepare('SELECT COUNT(*) as count FROM administradores').get();
+  if (Number(adminCount.count) === 0) {
     const bcrypt = require('bcryptjs');
     const username = process.env.ADMIN_USER || 'admin';
     let password = process.env.ADMIN_PASS;
@@ -273,13 +256,8 @@ async function initDatabase() {
     if (wasGenerated) {
       password = require('crypto').randomBytes(9).toString('base64url');
     }
-    console.log('[DIAG] antes de bcrypt.hashSync');
     const hash = bcrypt.hashSync(password, 10);
-    console.log('[DIAG] despues de bcrypt.hashSync');
-    await db.execute({
-      sql: 'INSERT INTO administradores (username, password_hash) VALUES (?, ?)',
-      args: [username, hash]
-    });
+    db.prepare('INSERT INTO administradores (username, password_hash) VALUES (?, ?)').run(username, hash);
     if (wasGenerated) {
       console.log('═══════════════════════════════════════════════');
       console.log(`[DB] Admin creado: usuario "${username}"`);
@@ -293,40 +271,41 @@ async function initDatabase() {
   return db;
 }
 
-// Capa de compatibilidad: emula prepare() de sql.js pero con async
+// Capa de compatibilidad: expone la misma API async que usaba el driver
+// anterior (@libsql/client) para no tener que tocar el resto del código.
+// better-sqlite3 es síncrono por dentro; se envuelve en funciones async.
 function prepare(sql) {
+  const stmt = () => db.prepare(sql);
   return {
     async get(...params) {
       const args = params.length > 0 ? (Array.isArray(params[0]) ? params[0] : params) : [];
-      const result = await db.execute({ sql, args });
-      return result.rows.length > 0 ? result.rows[0] : undefined;
+      return stmt().get(...args);
     },
     async all(...params) {
       const args = params.length > 0 ? (Array.isArray(params[0]) ? params[0] : params) : [];
-      const result = await db.execute({ sql, args });
-      return result.rows;
+      return stmt().all(...args);
     },
     async run(...params) {
       const args = params.length > 0 ? (Array.isArray(params[0]) ? params[0] : params) : [];
-      const result = await db.execute({ sql, args });
+      const result = stmt().run(...args);
       return {
         lastInsertRowid: Number(result.lastInsertRowid) || 0,
-        changes: result.rowsAffected || 0
+        changes: result.changes || 0
       };
     }
   };
 }
 
 async function exec(sql) {
-  await db.execute(sql);
+  db.exec(sql);
 }
 
 // Agrega una columna a una tabla si todavía no existe (migración idempotente).
-async function ensureColumn(table, column, definition) {
-  const info = await db.execute(`PRAGMA table_info(${table})`);
-  const exists = info.rows.some(r => r.name === column);
+function ensureColumn(table, column, definition) {
+  const info = db.prepare(`PRAGMA table_info(${table})`).all();
+  const exists = info.some(r => r.name === column);
   if (!exists) {
-    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     console.log(`[DB] Migración: columna ${table}.${column} agregada`);
   }
 }
