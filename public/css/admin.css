@@ -1056,6 +1056,17 @@
       .stats-grid {
         grid-template-columns: repeat(2, 1fr);
       }
+
+      /* Inline grid/flex layouts (forms, modals) don't have their own
+         breakpoints — collapse them to one column and let flex rows wrap. */
+      [style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      [style*="display:flex"],
+      [style*="display: flex"] {
+        flex-wrap: wrap;
+      }
     }
 
     .help-btn {
