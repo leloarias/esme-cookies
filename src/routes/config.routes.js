@@ -67,6 +67,9 @@ router.post('/api/config', verifyToken, async (req, res) => {
     if (body.adminEmail !== undefined) {
       await prepare('UPDATE config SET adminEmail=? WHERE id=1').run(body.adminEmail);
     }
+    if (body.emailFrom !== undefined) {
+      await prepare('UPDATE config SET emailFrom=? WHERE id=1').run(body.emailFrom);
+    }
     if (body.emailHost !== undefined) {
       await prepare('UPDATE config SET emailHost=? WHERE id=1').run(body.emailHost);
     }

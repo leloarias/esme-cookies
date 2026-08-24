@@ -74,7 +74,7 @@ async function sendNewOrderEmail(orderData) {
       </body></html>`;
 
     await transporter.sendMail({
-      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailUser}>`,
+      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailFrom || config.emailUser}>`,
       to: config.adminEmail,
       subject: `🍪 Nuevo Pedido #${String(orderData.numero).padStart(4, '0')} - ${orderData.cliente}`,
       html: htmlContent,
@@ -166,7 +166,7 @@ async function sendCustomerConfirmationEmail(orderData) {
       </body></html>`;
 
     await transporter.sendMail({
-      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailUser}>`,
+      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailFrom || config.emailUser}>`,
       to: cliente.email,
       subject: `🍪 Tu Pedido #${String(orderData.numero).padStart(4, '0')} ha sido recibido`,
       html: htmlContent
@@ -229,7 +229,7 @@ async function sendStatusChangeEmail(orderData, newStatus) {
       </body></html>`;
 
     await transporter.sendMail({
-      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailUser}>`,
+      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailFrom || config.emailUser}>`,
       to: cliente.email,
       subject: `${info.emoji} Pedido #${String(orderData.numero).padStart(4, '0')} - ${info.titulo}`,
       html: htmlContent
@@ -294,7 +294,7 @@ async function sendLowStockEmail(ingredientesBajos) {
       </body></html>`;
 
     await transporter.sendMail({
-      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailUser}>`,
+      from: `"${config.shopName || 'Esme Cookies'} 🍪" <${config.emailFrom || config.emailUser}>`,
       to: config.adminEmail,
       subject: `⚠️ Poco stock: ${ingredientesBajos.map(i => i.nombre).join(', ')}`,
       html: htmlContent,

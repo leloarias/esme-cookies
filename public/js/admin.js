@@ -647,6 +647,7 @@
 
           // Email
           document.getElementById('cfg-email-user').value = currentConfig.emailUser || '';
+          document.getElementById('cfg-email-from').value = currentConfig.emailFrom || '';
           document.getElementById('cfg-admin-email').value = currentConfig.adminEmail || '';
           document.getElementById('cfg-email-host').value = currentConfig.emailHost || 'smtp.gmail.com';
           document.getElementById('cfg-email-port').value = currentConfig.emailPort || 465;
@@ -743,6 +744,7 @@
     async function saveEmailConfig() {
       var data = {
         emailUser: document.getElementById('cfg-email-user').value.trim(),
+        emailFrom: document.getElementById('cfg-email-from').value.trim(),
         emailPass: document.getElementById('cfg-email-pass').value,
         adminEmail: document.getElementById('cfg-admin-email').value.trim(),
         emailHost: document.getElementById('cfg-email-host').value.trim(),

@@ -212,6 +212,10 @@ async function initDatabase() {
   ensureColumn('pedidos', 'comprobante_url', 'TEXT');
   ensureColumn('pedidos', 'fecha_entrega', 'TEXT');
   ensureColumn('productos', 'activo', 'INTEGER DEFAULT 1');
+  // Dirección que ven los destinatarios en "De:" — puede diferir del usuario
+  // SMTP (proveedores como Brevo autentican con un login propio, distinto
+  // de la dirección con marca que se quiere mostrar como remitente).
+  ensureColumn('config', 'emailFrom', 'TEXT');
 
   // Inicializar config si está vacía
   const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get();
