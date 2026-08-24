@@ -24,10 +24,14 @@
       <div class="logo">🍪</div>
       <h1>Esme Cookies</h1>
       <p>Panel de Administración</p>
-      <input type="text" id="username" placeholder="Usuario" 
+      <input type="text" id="username" placeholder="Usuario" autocapitalize="off" autocorrect="off" spellcheck="false"
         onkeypress="if(event.key==='Enter')document.getElementById('password').focus()">
-      <input type="password" id="password" placeholder="Ingresa la contrasena"
-        onkeypress="if(event.key==='Enter')login()">
+      <div style="position:relative;">
+        <input type="password" id="password" placeholder="Ingresa la contrasena" autocapitalize="off" autocorrect="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding-right:44px;"
+          onkeypress="if(event.key==='Enter')login()">
+        <button type="button" onclick="togglePasswordVisibility()" aria-label="Mostrar contraseña"
+          style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;padding:4px;">👁️</button>
+      </div>
       <button class="login-btn" onclick="login()">Ingresar</button>
       <p class="login-error" id="login-error">Credenciales incorrectas</p>
       <p style="margin-top: 20px; font-size: 0.8rem;"><a href="/">← Volver a pedidos</a></p>

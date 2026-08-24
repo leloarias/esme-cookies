@@ -207,6 +207,11 @@
       return res;
     }
 
+    function togglePasswordVisibility() {
+      var input = document.getElementById('password');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
     async function login() {
       var user = document.getElementById('username').value;
       var pass = document.getElementById('password').value;
