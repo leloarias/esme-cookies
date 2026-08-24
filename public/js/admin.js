@@ -209,7 +209,10 @@
 
     function togglePasswordVisibility() {
       var input = document.getElementById('password');
-      input.type = input.type === 'password' ? 'text' : 'password';
+      var btn = document.getElementById('toggle-password-btn');
+      var showing = input.type === 'password';
+      input.type = showing ? 'text' : 'password';
+      btn.textContent = showing ? '🔓' : '🔒';
     }
 
     async function login() {
